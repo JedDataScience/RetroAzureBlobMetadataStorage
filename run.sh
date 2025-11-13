@@ -15,31 +15,41 @@ fi
 
 # Check if .env file exists and if it's using real Azure Storage
 USE_AZURITE=true
+ENV_ARGS=""
 if [ -f .env ]; then
     if grep -q "blob.core.windows.net" .env 2>/dev/null; then
         echo "✅ Using .env file with real Azure Storage (skipping Azurite)"
         USE_AZURITE=false
         ENV_ARGS="--env-file .env"
     else
-        echo "✅ Using .env file with Azurite"
+        echo "✅ Using .env file (will use Azurite if connection string points to it)"
         ENV_ARGS="--env-file .env"
+        # Check if .env already has Azurite connection string
+        if ! grep -q "UseDevelopmentStorage=true\|devstoreaccount1\|127.0.0.1:10000" .env 2>/dev/null; then
+            # .env exists but doesn't specify Azurite, so we'll start it and override
+            USE_AZURITE=true
+        fi
     fi
 else
     echo "⚠️  No .env file found. Using Azurite (Azure Storage emulator) for local testing."
-    ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=UseDevelopmentStorage=true -e BLOB_CONTAINER=uploads"
+    ENV_ARGS="-e BLOB_CONTAINER=uploads"
 fi
 
 # Start Azurite if needed
 if [ "$USE_AZURITE" = true ]; then
     echo "📦 Starting Azurite (Azure Storage emulator)..."
     
+    # Create a Docker network for container communication (if it doesn't exist)
+    docker network create azurite-network 2>/dev/null || true
+    
     # Stop and remove existing Azurite container if it exists
     docker stop azurite 2>/dev/null || true
     docker rm azurite 2>/dev/null || true
     
-    # Start Azurite container
+    # Start Azurite container on the network
     docker run -d \
       --name azurite \
+      --network azurite-network \
       -p 10000:10000 \
       -p 10001:10001 \
       -p 10002:10002 \
@@ -56,6 +66,17 @@ if [ "$USE_AZURITE" = true ]; then
         echo "❌ Failed to start Azurite. Check logs with: docker logs azurite"
         exit 1
     fi
+    
+    # Create a connection string that works from inside Docker container
+    # Use the container name "azurite" since both containers are on the same Docker network
+    # This works cross-platform (Linux, Mac, Windows)
+    AZURITE_CONN_STR="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+    if [ -z "$ENV_ARGS" ] || [ "$ENV_ARGS" = "-e BLOB_CONTAINER=uploads" ]; then
+        ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR -e BLOB_CONTAINER=uploads"
+    else
+        # .env file exists, override the connection string
+        ENV_ARGS="$ENV_ARGS -e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR"
+    fi
 fi
 
 # Build the Docker image
@@ -69,11 +90,22 @@ docker rm blob-manager 2>/dev/null || true
 
 # Run the Flask API container
 echo "🏃 Starting Flask API container..."
-docker run -d \
-  --name blob-manager \
-  -p 5000:5000 \
-  $ENV_ARGS \
-  blob-manager:latest
+if [ "$USE_AZURITE" = true ]; then
+    # Connect to the same network as Azurite
+    docker run -d \
+      --name blob-manager \
+      --network azurite-network \
+      -p 5000:5000 \
+      $ENV_ARGS \
+      blob-manager:latest
+else
+    # Use default network if not using Azurite
+    docker run -d \
+      --name blob-manager \
+      -p 5000:5000 \
+      $ENV_ARGS \
+      blob-manager:latest
+fi
 
 # Wait for container to be ready
 echo "⏳ Waiting for Flask API to be ready..."
