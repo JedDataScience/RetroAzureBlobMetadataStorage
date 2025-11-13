@@ -106,7 +106,7 @@ docker stop blob-manager 2>/dev/null || true
 docker rm blob-manager 2>/dev/null || true
 
 # Allow API_PORT to be overridden via environment variable, default to 5000
-API_PORT=${API_PORT:-5000}
+API_PORT=${API_PORT:-5001}
 
 # Check if the port is available
 if lsof -Pi :$API_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
