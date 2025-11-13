@@ -282,7 +282,7 @@ See `TESTING.md` for detailed testing procedures.
 
 ## 7) Links
 
-- **GitHub Repo**: [INSERT-YOUR-REPO-URL]
+- **GitHub Repo**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
 - **Public Cloud App**: 
   - Frontend: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
   - API: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
