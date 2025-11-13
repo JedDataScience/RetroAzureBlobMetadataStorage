@@ -1,0 +1,78 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+ENV/
+
+# Node.js
+node_modules/
+.next/
+out/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-debug.log*
+
+# Environment variables
+.env
+.env.local
+.env*.local
+*.env
+# Keep .env.template and .env.example as template files
+!.env.template
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Build artifacts
+*.zip
+*.tar.gz
+*.tgz
+flask-app.zip
+func-app.zip
+
+# Logs
+*.log
+logs/
+deployment*.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.old
+
+# Azure
+.azure/
+
+# Testing
+coverage/
+.nyc_output/
+*.test.js.snap
+
+# Docker
+.dockerignore

@@ -1,0 +1,64 @@
+ARCHITECTURE DIAGRAM DESCRIPTION
+================================
+
+Create a PNG diagram with the following structure:
+
+┌─────────────────────────────────────────────────────────────┐
+│                    USER BROWSER                              │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Next.js Frontend (React 19, TypeScript)            │  │
+│  │  - Terminal-style UI                                 │  │
+│  │  - File upload interface                             │  │
+│  │  - Metadata editor                                   │  │
+│  └──────────────────┬───────────────────────────────────┘  │
+└──────────────────────┼──────────────────────────────────────┘
+                       │ HTTPS REST API
+                       │ (JSON requests/responses)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│              FLASK REST API                                │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Docker Container (Python 3.11)                      │  │
+│  │  - Gunicorn WSGI Server                             │  │
+│  │  - Flask Application                                │  │
+│  │                                                      │  │
+│  │  Endpoints:                                         │  │
+│  │  • GET  /health                                     │  │
+│  │  • GET  /api/blobs                                  │  │
+│  │  • POST /api/blobs                                  │  │
+│  │  • PUT  /api/blobs/<name>/metadata                  │  │
+│  │  • DELETE /api/blobs/<name>                         │  │
+│  └──────────────────┬───────────────────────────────────┘  │
+└──────────────────────┼──────────────────────────────────────┘
+                       │ Azure Storage SDK
+                       │ (Python azure-storage-blob)
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│           AZURE BLOB STORAGE                                │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Storage Account: blobmetadata1762923504            │  │
+│  │  Container: uploads                                 │  │
+│  │                                                      │  │
+│  │  Features:                                          │  │
+│  │  • File storage (any format)                        │  │
+│  │  • Metadata (key-value pairs)                       │  │
+│  │  • SAS token generation                             │  │
+│  │  • Streaming for large files                        │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+
+ADDITIONAL NOTES:
+- Use arrows to show data flow direction
+- Use different colors for each layer
+- Include container boundaries (dashed lines)
+- Show HTTPS for frontend-API communication
+- Show Azure SDK for API-Storage communication
+
+TOOLS TO USE:
+- draw.io (https://app.diagrams.net/)
+- Lucidchart
+- Excalidraw
+- Or any diagramming tool
+
+EXPORT AS: architecture.png (PNG format, recommended size: 1200x800px)
+

@@ -1,0 +1,50 @@
+services:
+  # Azurite (Local Azure Storage Emulator) - OPTIONAL
+  # Uncomment this section if you want to use Azurite for local development
+  # Comment out or remove when using real Azure Storage
+  # azurite:
+  #   image: mcr.microsoft.com/azure-storage/azurite
+  #   container_name: azurite
+  #   command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+  #   ports:
+  #     - "11000:10000"
+  #     - "11001:10001"
+  #     - "11002:10002"
+  #   volumes:
+  #     - azurite_data:/data
+
+  web:
+    build: ./web
+    ports:
+      - "${WEB_PORT:-5001}:5000"
+    env_file: .env
+    environment:
+      - AZURE_STORAGE_CONNECTION_STRING=${AZURE_STORAGE_CONNECTION_STRING}
+      - AZURE_STORAGE_ACCOUNT_NAME=${AZURE_STORAGE_ACCOUNT_NAME}
+      - AZURE_STORAGE_CONTAINER=${AZURE_STORAGE_CONTAINER}
+      - BLOB_CONTAINER=${BLOB_CONTAINER}
+      - FLASK_SECRET=${FLASK_SECRET}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - SAS_EXPIRY_MINUTES=${SAS_EXPIRY_MINUTES}
+      - DEFAULT_PROJECT_TAG=${DEFAULT_PROJECT_TAG}
+      - ACCOUNT_KEY=${ACCOUNT_KEY}
+      - AZURITE_BLOB_HOST_PORT=${AZURITE_BLOB_HOST_PORT:-11000}
+    # Uncomment if using Azurite for local development
+    # depends_on:
+    #   azurite:
+    #     condition: service_started
+
+  frontend:
+    build:
+      context: ./code
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:5001
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://web:5000
+    depends_on:
+      - web
+
+# volumes:
+#   azurite_data:
