@@ -58,17 +58,24 @@ docker run --rm -p 5000:5000 \
   blob-manager:latest
 ```
 
-**Note**: For local testing without Azure Storage, you can use Azurite (Azure Storage emulator). See `AZURE_SETUP.md` for instructions on setting up Azurite or real Azure Storage.
+**Note**: The `run.sh` script automatically starts Azurite (Azure Storage emulator) for local testing, so no additional setup is required.
 
-**Alternative: Using run.sh script**
+**Recommended: Using run.sh script (One-Command Solution)**
+
+The `run.sh` script automatically:
+- Starts Azurite (Azure Storage emulator) in a Docker container
+- Builds and starts the Flask API
+- Verifies both services are healthy
 
 ```bash
-# Make the script executable
+# Make the script executable (if needed)
 chmod +x run.sh
 
-# Run the application
+# Run the application (Azurite starts automatically)
 ./run.sh
 ```
+
+The script will work out of the box with no modifications. If you have a `.env` file with real Azure Storage credentials, it will use those instead of Azurite.
 
 ### Health Check
 
