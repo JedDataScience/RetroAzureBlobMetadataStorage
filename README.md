@@ -79,7 +79,7 @@ The script automatically:
 docker build -t blob-manager:latest -f web/Dockerfile ./web
 
 # Run the container (using Azurite for local testing)
-docker run --rm -p 5000:5000 \
+docker run --rm -p 5001:5000 \
   -e AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" \
   -e BLOB_CONTAINER="uploads" \
   blob-manager:latest
@@ -90,7 +90,7 @@ docker run --rm -p 5000:5000 \
 ```bash
 cd code
 pnpm install
-NEXT_PUBLIC_API_URL=http://localhost:5000 pnpm dev
+NEXT_PUBLIC_API_URL=http://localhost:5001 pnpm dev
 ```
 
 Access the frontend at http://localhost:3000
@@ -109,11 +109,11 @@ Verify services are running:
 
 ```bash
 # API health
-curl http://localhost:5000/health
+curl http://localhost:5001/health
 # Expected: {"ok": true}
 
 # Storage connectivity
-curl http://localhost:5000/health/storage
+curl http://localhost:5001/health/storage
 # Expected: {"ok": true, "container": "uploads"}
 ```
 
@@ -121,13 +121,13 @@ curl http://localhost:5000/health/storage
 
 ```bash
 # List all blobs
-curl http://localhost:5000/api/blobs
+curl http://localhost:5001/api/blobs
 
 # Upload a test file
-curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5000/api/blobs
+curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5001/api/blobs
 
 # Get blob metadata
-curl http://localhost:5000/api/blobs/your-file-name.pdf
+curl http://localhost:5001/api/blobs/your-file-name.pdf
 ```
 
 ## 4) Deployment

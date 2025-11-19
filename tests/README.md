@@ -14,7 +14,7 @@ pip install pytest requests
 2. Ensure the API is running:
 ```bash
 # Using Docker
-docker run -p 5000:5000 \
+docker run -p 5001:5000 \
   -e AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" \
   -e BLOB_CONTAINER="uploads" \
   blob-manager:latest
@@ -30,7 +30,7 @@ docker run -p 5000:5000 \
 pytest test_smoke.py -v
 
 # Run with API URL override
-API_BASE_URL=http://localhost:5000 pytest test_smoke.py -v
+API_BASE_URL=http://localhost:5001 pytest test_smoke.py -v
 
 # Run specific test
 pytest test_smoke.py::test_health_endpoint -v

@@ -10,7 +10,7 @@ import os
 from pathlib import Path
 
 # Base URL for the API (default to localhost)
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:5000")
+API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:5001")
 
 # Test file for upload
 TEST_FILE_PATH = Path(__file__).parent / "test_data" / "test.txt"
@@ -33,7 +33,7 @@ def wait_for_api():
         retry_count += 1
         time.sleep(1)
     
-    pytest.skip("API is not available. Start the API with: docker run -p 5000:5000 blob-manager:latest")
+    pytest.skip("API is not available. Start the API with: docker run -p 5001:5000 blob-manager:latest")
 
 
 def test_health_endpoint(wait_for_api):
