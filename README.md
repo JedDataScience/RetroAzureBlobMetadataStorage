@@ -41,56 +41,80 @@ The architecture consists of:
 
 - **No external datasets or models**: The application manages user-uploaded files only
 
-## 3) How to Run (Local)
+## 3) Local Development
 
-### Docker
+### Prerequisites
 
-The application can be run with a single Docker command:
+- Docker (for running the API and Azurite)
+- Node.js 20+ and pnpm (for running the frontend)
+- Optional: Azure Storage account (or use Azurite emulator)
+
+### Quick Start (Recommended)
+
+The easiest way to run the application locally is using the `run.sh` script:
+
+```bash
+# Make the script executable (if needed)
+chmod +x run.sh
+
+# Run the application (starts Azurite, API, and frontend)
+./run.sh
+```
+
+The script automatically:
+- Starts Azurite (Azure Storage emulator) in a Docker container
+- Builds and starts the Flask API container
+- Installs frontend dependencies (if needed)
+- Starts the Next.js frontend dev server
+- Verifies all services are healthy
+
+**Note**: If you have a `.env` file with real Azure Storage credentials, the script will use those instead of Azurite.
+
+### Manual Setup
+
+#### Backend API
 
 ```bash
 # Build the Docker image
 docker build -t blob-manager:latest -f web/Dockerfile ./web
 
-# Run the container (using Azurite connection string for local testing)
+# Run the container (using Azurite for local testing)
 docker run --rm -p 5000:5000 \
   -e AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" \
   -e BLOB_CONTAINER="uploads" \
   blob-manager:latest
 ```
 
-**Note**: The `run.sh` script automatically starts Azurite (Azure Storage emulator) for local testing, so no additional setup is required.
-
-**Recommended: Using run.sh script (One-Command Solution)**
-
-The `run.sh` script automatically:
-- Starts Azurite (Azure Storage emulator) in a Docker container
-- Builds and starts the Flask API
-- Verifies both services are healthy
+#### Frontend
 
 ```bash
-# Make the script executable (if needed)
-chmod +x run.sh
-
-# Run the application (Azurite starts automatically)
-./run.sh
+cd code
+pnpm install
+NEXT_PUBLIC_API_URL=http://localhost:5000 pnpm dev
 ```
 
-The script will work out of the box with no modifications. If you have a `.env` file with real Azure Storage credentials, it will use those instead of Azurite.
+Access the frontend at http://localhost:3000
 
-### Health Check
+### Using Docker Compose
 
-Once the container is running, verify it's working:
+Alternatively, use Docker Compose to run all services:
 
 ```bash
-# Check health endpoint
+docker-compose up
+```
+
+### Health Checks
+
+Verify services are running:
+
+```bash
+# API health
 curl http://localhost:5000/health
+# Expected: {"ok": true}
 
-# Expected response: {"ok": true}
-
-# Check storage health
+# Storage connectivity
 curl http://localhost:5000/health/storage
-
-# Expected response: {"ok": true, "container": "uploads"}
+# Expected: {"ok": true, "container": "uploads"}
 ```
 
 ### Testing the API
@@ -106,19 +130,98 @@ curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5000/api/blobs
 curl http://localhost:5000/api/blobs/your-file-name.pdf
 ```
 
-### Frontend (Optional - for full application)
+## 4) Deployment
 
-The frontend requires Node.js and can be run separately:
+### Overview
+
+The application is deployed to Azure using:
+- **Frontend**: Azure Static Web Apps (Next.js static export)
+- **Backend API**: Azure Container Apps (Flask API in Docker)
+- **Storage**: Azure Blob Storage
+
+### Automated Deployment (CI/CD)
+
+Deployment is automated via GitHub Actions. The workflow (`.github/workflows/azure-deploy.yml`) triggers on pushes to `main` branch and deploys:
+
+1. **Frontend** → Azure Static Web Apps
+2. **Backend API** → Azure Container Apps
+
+#### Required GitHub Secrets
+
+Configure these secrets in your GitHub repository:
+
+- `AZURE_WEBAPP_PUBLISH_PROFILE`: Publish profile for Azure Web App/Container App
+- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Deployment token for Static Web Apps
+- `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
+
+#### Deployment Process
+
+1. Push to `main` branch or manually trigger workflow
+2. GitHub Actions builds and deploys:
+   - Frontend: Builds Next.js app and deploys to Static Web Apps
+   - Backend: Builds Docker image and deploys to Container Apps
+3. Services are automatically configured with environment variables
+
+### Manual Deployment
+
+#### Deploy Backend API to Azure Container Apps
+
+```bash
+# Build Docker image
+docker build -t blob-manager:latest -f web/Dockerfile ./web
+
+# Tag and push to Azure Container Registry (ACR)
+az acr build --registry <your-acr-name> --image blob-manager:latest ./web
+
+# Deploy to Container Apps
+az containerapp create \
+  --name retro-azure-metadata-api \
+  --resource-group <your-resource-group> \
+  --image <your-acr-name>.azurecr.io/blob-manager:latest \
+  --environment <container-app-env> \
+  --env-vars \
+    AZURE_STORAGE_CONNECTION_STRING=<connection-string> \
+    BLOB_CONTAINER=uploads
+```
+
+#### Deploy Frontend to Azure Static Web Apps
 
 ```bash
 cd code
-pnpm install
-NEXT_PUBLIC_API_URL=http://localhost:5000 pnpm dev
+
+# Build Next.js app (static export)
+NEXT_PUBLIC_API_URL=<your-api-url> pnpm build
+
+# Deploy using Azure Static Web Apps CLI
+swa deploy ./out --app-name <your-static-web-app-name>
 ```
 
-Access the frontend at http://localhost:3000
+### Environment Configuration
 
-## 4) Design Decisions
+For production deployment, configure these environment variables:
+
+**Backend (Container Apps):**
+- `AZURE_STORAGE_CONNECTION_STRING`: Azure Storage connection string
+- `BLOB_CONTAINER`: Blob container name (default: `uploads`)
+- `SAS_EXPIRY_MINUTES`: SAS token expiry (default: 5 minutes)
+- `ACCOUNT_KEY`: Storage account key (for SAS generation)
+
+**Frontend:**
+- `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
+
+### Production URLs
+
+- **Frontend**: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
+- **API**: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
+
+### Post-Deployment Verification
+
+1. Check API health: `curl https://<your-api-url>/health`
+2. Check storage connectivity: `curl https://<your-api-url>/health/storage`
+3. Verify frontend can connect to API
+4. Test file upload and metadata operations
+
+## 5) Design Decisions
 
 ### Why Flask?
 
@@ -182,7 +285,7 @@ Azure Blob Storage was chosen because:
 - Users responsible for metadata they add
 
 **Network Security:**
-- HTTPS enforced in production (Azure Container Apps)
+- HTTPS enforced in production (Azure Container Apps and Static Web Apps)
 - CORS configured to restrict frontend origins
 - Security headers (CSP, HSTS, X-Frame-Options) implemented
 
@@ -202,14 +305,15 @@ Azure Blob Storage was chosen because:
 - Container Apps support auto-scaling (0 to N replicas)
 - Stateless API design allows horizontal scaling
 - Storage layer scales independently
+- Static Web Apps automatically scales frontend traffic
 
 **Known Limitations:**
 - No user authentication (all users share the same storage)
 - No file versioning or backup
 - Metadata editing requires blob re-upload (Azure limitation)
-- Frontend requires separate deployment (not included in single Docker command)
+- Frontend and backend are deployed separately (by design for scalability)
 
-## 5) Results & Evaluation
+## 6) Results & Evaluation
 
 ### Screenshots
 
@@ -253,9 +357,7 @@ python -m pytest test_smoke.py -v
 - View files in browser
 - Delete blobs and verify removal
 
-See `TESTING.md` for detailed testing procedures.
-
-## 6) What's Next
+## 7) What's Next
 
 ### Planned Improvements
 
@@ -280,21 +382,19 @@ See `TESTING.md` for detailed testing procedures.
 3. **Analytics Dashboard**: Usage statistics and storage analytics
 4. **Multi-cloud Support**: Extend to support AWS S3 and Google Cloud Storage
 
-## 7) Links
+## 8) Links & Resources
 
-- **GitHub Repo**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
-- **Public Cloud App**: 
+- **GitHub Repository**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
+- **Live Application**: 
   - Frontend: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
   - API: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
 
----
+### Additional Documentation
 
-## Additional Documentation
-
-- `AZURE_SETUP.md`: Detailed Azure Storage setup instructions
-- `TESTING.md`: Comprehensive testing guide
 - `docker-compose.yml`: Multi-container setup for local development
-- `web/Dockerfile`: Container build configuration
+- `web/Dockerfile`: Container build configuration for the Flask API
+- `.github/workflows/azure-deploy.yml`: CI/CD deployment workflow
+- `tests/`: Test suite and smoke tests
 
 ## License
 
