@@ -155,29 +155,6 @@ The application is deployed to Azure using:
 - **Backend API**: Azure Container Apps (Flask API in Docker)
 - **Storage**: Azure Blob Storage
 
-### Automated Deployment (CI/CD)
-
-Deployment is automated via GitHub Actions. The workflow (`.github/workflows/azure-deploy.yml`) triggers on pushes to `main` branch and deploys:
-
-1. **Frontend** → Azure Static Web Apps
-2. **Backend API** → Azure Container Apps
-
-#### Required GitHub Secrets
-
-Configure these secrets in your GitHub repository:
-
-- `AZURE_WEBAPP_PUBLISH_PROFILE`: Publish profile for Azure Web App/Container App
-- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Deployment token for Static Web Apps
-- `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
-
-#### Deployment Process
-
-1. Push to `main` branch or manually trigger workflow
-2. GitHub Actions builds and deploys:
-   - Frontend: Builds Next.js app and deploys to Static Web Apps
-   - Backend: Builds Docker image and deploys to Container Apps
-3. Services are automatically configured with environment variables
-
 ### Manual Deployment
 
 #### Deploy Backend API to Azure Container Apps
