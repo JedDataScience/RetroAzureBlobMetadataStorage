@@ -17,6 +17,42 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
+# Check if Python is installed
+if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
+    echo "⚠️  Warning: Python is not installed. Some features may not work."
+    echo "   Install Python 3.8+ for full functionality."
+else
+    # Determine Python command
+    if command -v python3 &> /dev/null; then
+        PYTHON_CMD="python3"
+        PIP_CMD="pip3"
+    else
+        PYTHON_CMD="python"
+        PIP_CMD="pip"
+    fi
+    
+    # Check if pip is installed
+    if ! command -v $PIP_CMD &> /dev/null; then
+        echo "⚠️  Warning: pip is not installed. Installing Python dependencies may fail."
+        echo "   Install pip to ensure all dependencies are available."
+    else
+        # Check if requirements.txt exists and install dependencies
+        if [ -f requirements.txt ]; then
+            echo "📦 Checking Python dependencies..."
+            # Check if requirements are already installed (quick check)
+            if $PIP_CMD show Flask &> /dev/null && $PIP_CMD show pytest &> /dev/null; then
+                echo "✅ Python dependencies appear to be installed"
+            else
+                echo "📥 Installing Python dependencies from requirements.txt..."
+                $PIP_CMD install -q -r requirements.txt || {
+                    echo "⚠️  Warning: Failed to install some Python dependencies."
+                    echo "   You may need to install them manually: $PIP_CMD install -r requirements.txt"
+                }
+            fi
+        fi
+    fi
+fi
+
 # Check if Node.js package manager is installed (pnpm, npm, or yarn)
 if command -v pnpm &> /dev/null; then
     PACKAGE_MANAGER="pnpm"
@@ -207,7 +243,10 @@ if [ "$HEALTH_OK" = true ]; then
         echo "🎨 Setting up frontend..."
         
         # Check if frontend dependencies are installed
-        if [ ! -d "code/node_modules" ]; then
+        if [ ! -f "code/package.json" ]; then
+            echo "⚠️  Warning: code/package.json not found. Skipping frontend setup."
+            SKIP_FRONTEND_START=true
+        elif [ ! -d "code/node_modules" ]; then
             echo "📦 Installing frontend dependencies..."
             cd code
             if [ "$PACKAGE_MANAGER" = "pnpm" ]; then
