@@ -4,7 +4,7 @@
 
 **Problem:** Organizations and developers need an efficient way to manage files stored in cloud storage systems, particularly Azure Blob Storage. Traditional cloud storage interfaces are often complex and don't provide easy ways to view, organize, and manage file metadata. Users need a simple, web-based interface to upload files, view their contents, and edit metadata without navigating complex cloud portals.
 
-**Solution:** Azure Blob Metadata Manager is a modern web application that provides a user-friendly terminal-style interface for managing Azure Blob Storage. The application allows users to upload files, view them directly in the browser, list all stored files with their metadata, and edit blob metadata through an intuitive web interface. Built with Flask (Python) for the REST API and Next.js for the frontend, the application is fully containerized and can run locally with Docker or be deployed to Azure cloud services.
+**Solution:** Azure Blob Metadata Manager is a modern web application that provides a user-friendly terminal-style interface for managing Azure Blob Storage. The application allows users to upload files, view them directly in the browser, list all stored files with their metadata, and edit blob metadata through an intuitive web interface. Built with Flask (Python) for the REST API and Next.js for the frontend, the application is fully containerized and **designed primarily for local development** using Docker with Azurite (Azure Storage emulator). The application can also be deployed to Azure cloud services for production use (see Deployment section).
 
 ## 2) System Overview
 
@@ -14,11 +14,11 @@ This project implements several key concepts from the course modules:
 
 1. **Flask API Development**: The backend is built using Flask, demonstrating RESTful API design, request handling, CORS configuration, and proper error handling. The API provides endpoints for CRUD operations on Azure Blob Storage.
 
-2. **Cloud Storage Integration**: The project integrates with Azure Blob Storage, demonstrating cloud-native data storage patterns, SAS token generation for secure access, and metadata management.
+2. **Cloud Storage Integration**: The project integrates with Azurite (Azure Storage emulator) for local development, demonstrating cloud storage patterns, SAS token generation for secure access, and metadata management. The same codebase can work with real Azure Blob Storage when deployed to the cloud.
 
 3. **Containerization**: The application is fully containerized using Docker, demonstrating container-based deployment, environment variable management, and reproducible builds.
 
-4. **Web Application Architecture**: The project demonstrates a modern three-tier architecture with a React/Next.js frontend, Flask API backend, and Azure Blob Storage as the data layer.
+4. **Web Application Architecture**: The project demonstrates a modern three-tier architecture with a React/Next.js frontend, Flask API backend, and Azurite (Azure Storage emulator) as the data layer for local development. The architecture supports deployment to Azure cloud services.
 
 ### Architecture Diagram
 
@@ -27,17 +27,24 @@ This project implements several key concepts from the course modules:
 The architecture consists of:
 - **Frontend Layer**: Next.js application with React 19 and TypeScript, providing a terminal-style user interface
 - **API Layer**: Flask REST API running in a Docker container, handling all blob operations
-- **Storage Layer**: Azure Blob Storage for persistent file storage with metadata support
+- **Storage Layer**: 
+  - **Local Development**: Azurite (Azure Storage emulator) running in Docker
+  - **Production**: Azure Blob Storage (when deployed to cloud)
 
 ### Data/Models/Services
 
-- **Azure Blob Storage**: Cloud storage service for file persistence
+- **Azurite (Azure Storage Emulator)** - **Primary/Default**: Local Azure Storage emulator for development and testing
   - Container: `uploads` (default, configurable)
   - File formats: Any (images, PDFs, documents, etc.)
   - Metadata: Key-value pairs stored as blob properties
-  - License: Azure Storage service (requires Azure subscription)
+  - No Azure subscription required - runs entirely locally in Docker
+  - Provides the same API as Azure Blob Storage for seamless local development
+  - **This is the default and recommended setup for local development**
 
-- **Sample Data**: For local testing, the application can use Azurite (Azure Storage emulator) which requires no external dependencies
+- **Azure Blob Storage** - **Optional/Production**: Real Azure cloud storage (see Deployment section)
+  - Requires Azure subscription
+  - Same API as Azurite, so code works without changes
+  - Used only when deploying to production
 
 - **No external datasets or models**: The application manages user-uploaded files only
 
@@ -45,10 +52,11 @@ The architecture consists of:
 
 ### Prerequisites
 
-- Docker (required - handles all Python dependencies automatically)
+- Docker (required - handles all Python dependencies automatically and runs Azurite)
 - Node.js 20+ and pnpm (for running the frontend)
 - Optional: Python 3.8+ and pip (only needed if running tests locally without Docker)
-- Optional: Azure Storage account (or use Azurite emulator)
+
+**Note**: This project is **designed primarily for local development** using Azurite (Azure Storage emulator), which requires no Azure subscription or cloud resources. Cloud deployment instructions are provided in the Deployment section for advanced users who want to deploy to production.
 
 ### Installing Dependencies
 
@@ -74,12 +82,12 @@ chmod +x run.sh
 
 The script automatically:
 - Starts Azurite (Azure Storage emulator) in a Docker container
-- Builds and starts the Flask API container
+- Builds and starts the Flask API container (configured to use Azurite)
 - Installs frontend dependencies (if needed)
 - Starts the Next.js frontend dev server
 - Verifies all services are healthy
 
-**Note**: If you have a `.env` file with real Azure Storage credentials, the script will use those instead of Azurite.
+**Note**: The application uses Azurite for local development by default. No Azure subscription or cloud resources are required. For production deployment to Azure, see the Deployment section below.
 
 ### Manual Setup
 
@@ -89,9 +97,10 @@ The script automatically:
 # Build the Docker image
 docker build -t blob-manager:latest -f web/Dockerfile ./web
 
-# Run the container (using Azurite for local testing)
+# Run the container (using Azurite for local development)
+# Make sure Azurite is running first (or use docker-compose)
 docker run --rm -p 5001:5000 \
-  -e AZURE_STORAGE_CONNECTION_STRING="UseDevelopmentStorage=true" \
+  -e AZURE_STORAGE_CONNECTION_STRING="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;" \
   -e BLOB_CONTAINER="uploads" \
   blob-manager:latest
 ```
@@ -141,14 +150,46 @@ curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5001/api/blobs
 curl http://localhost:5001/api/blobs/your-file-name.pdf
 ```
 
-## 4) Deployment
+## 4) Deployment (Optional - Advanced)
+
+> **⚠️ Important**: This project is **designed primarily for local development** using Azurite. The deployment instructions below are for advanced users who want to deploy to Azure cloud services for production use. For most users, local development with Azurite is sufficient and recommended.
 
 ### Overview
 
-The application is deployed to Azure using:
+If you want to deploy the application to Azure cloud services (optional), it can be deployed using:
 - **Frontend**: Azure Static Web Apps (Next.js static export)
 - **Backend API**: Azure Container Apps (Flask API in Docker)
-- **Storage**: Azure Blob Storage
+- **Storage**: Azure Blob Storage (replaces Azurite)
+
+**Prerequisites for Deployment:**
+- Azure subscription
+- Azure CLI installed and configured
+- Azure Container Registry (ACR)
+- Azure Container Apps environment
+- Azure Static Web Apps resource
+
+### Automated Deployment (CI/CD)
+
+Deployment can be automated via GitHub Actions. The workflow (`.github/workflows/azure-deploy.yml`) triggers on pushes to `main` branch and deploys:
+
+1. **Frontend** → Azure Static Web Apps
+2. **Backend API** → Azure Container Apps
+
+#### Required GitHub Secrets
+
+Configure these secrets in your GitHub repository:
+
+- `AZURE_WEBAPP_PUBLISH_PROFILE`: Publish profile for Azure Web App/Container App
+- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Deployment token for Static Web Apps
+- `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
+
+#### Deployment Process
+
+1. Push to `main` branch or manually trigger workflow
+2. GitHub Actions builds and deploys:
+   - Frontend: Builds Next.js app and deploys to Static Web Apps
+   - Backend: Builds Docker image and deploys to Container Apps
+3. Services are automatically configured with environment variables
 
 ### Manual Deployment
 
@@ -189,18 +230,13 @@ swa deploy ./out --app-name <your-static-web-app-name>
 For production deployment, configure these environment variables:
 
 **Backend (Container Apps):**
-- `AZURE_STORAGE_CONNECTION_STRING`: Azure Storage connection string
+- `AZURE_STORAGE_CONNECTION_STRING`: Azure Storage connection string (replaces Azurite)
 - `BLOB_CONTAINER`: Blob container name (default: `uploads`)
 - `SAS_EXPIRY_MINUTES`: SAS token expiry (default: 5 minutes)
 - `ACCOUNT_KEY`: Storage account key (for SAS generation)
 
 **Frontend:**
 - `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
-
-### Production URLs
-
-- **Frontend**: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
-- **API**: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
 
 ### Post-Deployment Verification
 
@@ -224,32 +260,33 @@ Flask was chosen for the API layer because:
 - **Django**: Too heavyweight for a simple REST API
 - **Express.js**: Would require Node.js expertise and doesn't align with course Python focus
 
-### Why Azure Blob Storage?
+### Why Azurite (Azure Storage Emulator)?
 
-Azure Blob Storage was chosen because:
-- **Cloud-Native**: Demonstrates cloud storage patterns and integration
+Azurite was chosen because:
+- **Local Development**: No Azure subscription required, runs entirely locally
+- **Azure Compatibility**: Provides the same API as Azure Blob Storage for seamless development
 - **Metadata Support**: Native support for blob metadata (key-value pairs)
-- **Scalability**: Handles files of any size efficiently
-- **SAS Tokens**: Built-in secure access mechanism for file viewing
+- **Docker Integration**: Easy to run in containers alongside the application
+- **SAS Tokens**: Supports SAS token generation for secure access testing
 
 **Alternatives Considered:**
-- **AWS S3**: Similar functionality but Azure aligns with course cloud focus
-- **Local File System**: Not suitable for cloud deployment demonstration
+- **Real Azure Blob Storage**: Requires subscription and cloud resources (not needed for local dev)
+- **Local File System**: Doesn't demonstrate cloud storage patterns
 - **MongoDB GridFS**: Overkill for simple file storage needs
 
 ### Tradeoffs
 
 **Performance:**
-- **Pros**: Streaming file downloads for large files, efficient metadata queries
-- **Cons**: Network latency for cloud storage (mitigated by Azure's global CDN)
+- **Pros**: Streaming file downloads for large files, efficient metadata queries, local storage (no network latency)
+- **Cons**: Limited to local machine storage capacity
 
 **Cost:**
-- **Pros**: Pay-as-you-go pricing, minimal cost for small-scale usage
-- **Cons**: Can scale up with usage (addressed with cost management scripts)
+- **Pros**: Completely free - no cloud costs, no subscription required
+- **Cons**: Limited to local machine resources
 
 **Complexity:**
-- **Pros**: Simple architecture, easy to understand and maintain
-- **Cons**: Requires Azure account setup (mitigated with Azurite for local testing)
+- **Pros**: Simple architecture, easy to understand and maintain, no cloud setup required
+- **Cons**: Data is stored locally and not persisted across machine restarts (unless using Docker volumes)
 
 **Maintainability:**
 - **Pros**: Well-structured code, clear separation of concerns
@@ -258,9 +295,9 @@ Azure Blob Storage was chosen because:
 ### Security/Privacy
 
 **Secrets Management:**
-- Environment variables used for sensitive data (connection strings, keys)
-- `.env.example` provided as template (no secrets committed)
-- Azure Key Vault recommended for production deployments
+- Environment variables used for configuration
+- Azurite uses default development credentials (no real secrets needed for local development)
+- Production deployment requires Azure Key Vault or secure environment variable management
 
 **Input Validation:**
 - File upload size limits enforced
@@ -273,9 +310,9 @@ Azure Blob Storage was chosen because:
 - Users responsible for metadata they add
 
 **Network Security:**
-- HTTPS enforced in production (Azure Container Apps and Static Web Apps)
-- CORS configured to restrict frontend origins
+- CORS configured to allow frontend connections
 - Security headers (CSP, HSTS, X-Frame-Options) implemented
+- Local development runs on localhost (production uses HTTPS when deployed)
 
 ### Operations
 
@@ -286,20 +323,19 @@ Azure Blob Storage was chosen because:
 
 **Metrics:**
 - Health endpoints (`/health`, `/health/storage`) for basic monitoring
-- Container resource usage visible in Azure Portal
-- Can be extended with Application Insights
+- Container resource usage visible via Docker commands
 
 **Scaling Considerations:**
-- Container Apps support auto-scaling (0 to N replicas)
-- Stateless API design allows horizontal scaling
-- Storage layer scales independently
-- Static Web Apps automatically scales frontend traffic
+- Stateless API design allows horizontal scaling (if needed)
+- Storage limited to local machine capacity
+- Suitable for local development and testing
 
 **Known Limitations:**
 - No user authentication (all users share the same storage)
 - No file versioning or backup
-- Metadata editing requires blob re-upload (Azure limitation)
-- Frontend and backend are deployed separately (by design for scalability)
+- Metadata editing requires blob re-upload (Azure Storage API limitation)
+- Local development only - data stored in Docker containers
+- Data is ephemeral unless using Docker volumes for Azurite
 
 ## 6) Results & Evaluation
 
@@ -319,9 +355,9 @@ See `assets/` directory for:
 - Metadata update: ~100-200ms
 
 **Resource Footprint:**
-- Container: 1 CPU, 2GB RAM (configurable)
-- Storage: Pay-per-GB stored
-- Network: Minimal (API calls only)
+- Container: Minimal resources (default Docker limits)
+- Storage: Limited to local disk space
+- Network: Local only (no external network calls)
 
 ### Validation/Tests
 
@@ -349,16 +385,17 @@ python -m pytest test_smoke.py -v
 
 ### Planned Improvements
 
-1. **User Authentication**: Add Azure AD integration for user-specific storage
+1. **User Authentication**: Add basic authentication for user-specific storage
 2. **File Versioning**: Implement version history for uploaded files
 3. **Search Functionality**: Full-text search across blob names and metadata
 4. **Batch Operations**: Upload/delete multiple files at once
 5. **File Preview**: Enhanced preview for more file types
 6. **Metadata Templates**: Pre-defined metadata schemas for common use cases
+7. **Data Persistence**: Add Docker volumes for Azurite to persist data across restarts
 
 ### Refactors
 
-1. **Frontend Containerization**: Add Dockerfile for frontend to enable full containerized deployment
+1. **Frontend Containerization**: Add Dockerfile for frontend to enable full containerized local development
 2. **API Testing**: Expand test coverage with unit and integration tests
 3. **Error Handling**: More detailed error messages and recovery mechanisms
 4. **Documentation**: API documentation with OpenAPI/Swagger
@@ -366,22 +403,20 @@ python -m pytest test_smoke.py -v
 ### Stretch Features
 
 1. **Real-time Updates**: WebSocket support for live blob list updates
-2. **File Sharing**: Generate shareable links with expiration
+2. **File Sharing**: Generate shareable links with expiration (local network)
 3. **Analytics Dashboard**: Usage statistics and storage analytics
-4. **Multi-cloud Support**: Extend to support AWS S3 and Google Cloud Storage
+4. **Data Export**: Export blob data and metadata for backup
 
 ## 8) Links & Resources
 
 - **GitHub Repository**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
-- **Live Application**: 
-  - Frontend: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
-  - API: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
 
 ### Additional Documentation
 
-- `docker-compose.yml`: Multi-container setup for local development
+- `docker-compose.yml`: Multi-container setup for local development with Azurite
 - `web/Dockerfile`: Container build configuration for the Flask API
-- `.github/workflows/azure-deploy.yml`: CI/CD deployment workflow
+- `run.sh`: One-command launcher script for local development
+- `.github/workflows/azure-deploy.yml`: CI/CD deployment workflow (optional, for production deployment)
 - `tests/`: Test suite and smoke tests
 
 ## License
