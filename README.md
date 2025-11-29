@@ -45,25 +45,20 @@ The architecture consists of:
 
 ### Prerequisites
 
-- Docker (for running the API and Azurite)
-- Python 3.8+ and pip (for running tests and local development)
+- Docker (required - handles all Python dependencies automatically)
 - Node.js 20+ and pnpm (for running the frontend)
+- Optional: Python 3.8+ and pip (only needed if running tests locally without Docker)
 - Optional: Azure Storage account (or use Azurite emulator)
 
 ### Installing Dependencies
 
-The `run.sh` script automatically installs dependencies, but you can also install them manually:
-
 **Python Dependencies:**
-```bash
-pip install -r requirements.txt
-```
+- Automatically handled by Docker during container build (no manual installation needed)
+- If running tests locally without Docker: `pip install -r requirements.txt`
 
 **Frontend Dependencies:**
-```bash
-cd code
-pnpm install
-```
+- Automatically installed by `run.sh` if missing
+- Or manually: `cd code && pnpm install`
 
 ### Quick Start (Recommended)
 
