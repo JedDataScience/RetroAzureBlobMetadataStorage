@@ -1,8 +1,8 @@
 #!/bin/bash
 
-# Azure Blob Metadata Manager - One-Command Launcher
+# Azure Blob Metadata Manager - Local Development Launcher
 # This script builds and runs the Flask API with Azurite (Azure Storage emulator) in Docker containers
-# and starts the Next.js frontend
+# and starts the Next.js frontend for local development only
 
 set -e  # Exit on error
 
@@ -30,71 +30,47 @@ else
     SKIP_FRONTEND=true
 fi
 
-# Check if .env file exists and if it's using real Azure Storage
+# This project uses Azurite for local development only
 USE_AZURITE=true
-ENV_ARGS=""
-if [ -f .env ]; then
-    if grep -q "blob.core.windows.net" .env 2>/dev/null; then
-        echo "✅ Using .env file with real Azure Storage (skipping Azurite)"
-        USE_AZURITE=false
-        ENV_ARGS="--env-file .env"
-    else
-        echo "✅ Using .env file (will use Azurite if connection string points to it)"
-        ENV_ARGS="--env-file .env"
-        # Check if .env already has Azurite connection string
-        if ! grep -q "UseDevelopmentStorage=true\|devstoreaccount1\|127.0.0.1:10000" .env 2>/dev/null; then
-            # .env exists but doesn't specify Azurite, so we'll start it and override
-            USE_AZURITE=true
-        fi
-    fi
+ENV_ARGS="-e BLOB_CONTAINER=uploads"
+echo "📦 Using Azurite (Azure Storage emulator) for local development"
+
+# Start Azurite (Azure Storage emulator) for local development
+echo "📦 Starting Azurite (Azure Storage emulator)..."
+
+# Create a Docker network for container communication (if it doesn't exist)
+docker network create azurite-network 2>/dev/null || true
+
+# Stop and remove existing Azurite container if it exists
+docker stop azurite 2>/dev/null || true
+docker rm azurite 2>/dev/null || true
+
+# Start Azurite container on the network
+docker run -d \
+  --name azurite \
+  --network azurite-network \
+  -p 10000:10000 \
+  -p 10001:10001 \
+  -p 10002:10002 \
+  mcr.microsoft.com/azure-storage/azurite \
+  azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+
+echo "⏳ Waiting for Azurite to be ready..."
+sleep 3
+
+# Verify Azurite is running
+if docker ps | grep -q azurite; then
+    echo "✅ Azurite is running on ports 10000-10002"
 else
-    echo "⚠️  No .env file found. Using Azurite (Azure Storage emulator) for local testing."
-    ENV_ARGS="-e BLOB_CONTAINER=uploads"
+    echo "❌ Failed to start Azurite. Check logs with: docker logs azurite"
+    exit 1
 fi
 
-# Start Azurite if needed
-if [ "$USE_AZURITE" = true ]; then
-    echo "📦 Starting Azurite (Azure Storage emulator)..."
-    
-    # Create a Docker network for container communication (if it doesn't exist)
-    docker network create azurite-network 2>/dev/null || true
-    
-    # Stop and remove existing Azurite container if it exists
-    docker stop azurite 2>/dev/null || true
-    docker rm azurite 2>/dev/null || true
-    
-    # Start Azurite container on the network
-    docker run -d \
-      --name azurite \
-      --network azurite-network \
-      -p 10000:10000 \
-      -p 10001:10001 \
-      -p 10002:10002 \
-      mcr.microsoft.com/azure-storage/azurite \
-      azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
-    
-    echo "⏳ Waiting for Azurite to be ready..."
-    sleep 3
-    
-    # Verify Azurite is running
-    if docker ps | grep -q azurite; then
-        echo "✅ Azurite is running on ports 10000-10002"
-    else
-        echo "❌ Failed to start Azurite. Check logs with: docker logs azurite"
-        exit 1
-    fi
-    
-    # Create a connection string that works from inside Docker container
-    # Use the container name "azurite" since both containers are on the same Docker network
-    # This works cross-platform (Linux, Mac, Windows)
-    AZURITE_CONN_STR="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
-    if [ -z "$ENV_ARGS" ] || [ "$ENV_ARGS" = "-e BLOB_CONTAINER=uploads" ]; then
-        ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR -e BLOB_CONTAINER=uploads"
-    else
-        # .env file exists, override the connection string
-        ENV_ARGS="$ENV_ARGS -e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR"
-    fi
-fi
+# Create a connection string that works from inside Docker container
+# Use the container name "azurite" since both containers are on the same Docker network
+# This works cross-platform (Linux, Mac, Windows)
+AZURITE_CONN_STR="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;AccountKey=Eby8vdM02xNOcqFlqUwJPLlmEtlCDXJ1OUzFT50uSRZ6IFsuFq2UVErCz4I6tq/K1SZFPTOtr/KBHBeksoGMGw==;BlobEndpoint=http://azurite:10000/devstoreaccount1;"
+ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR -e BLOB_CONTAINER=uploads"
 
 # Build the Docker image
 echo "📦 Building Flask API Docker image..."
@@ -142,22 +118,13 @@ fi
 
 # Run the Flask API container
 echo "🏃 Starting Flask API container on port $API_PORT..."
-if [ "$USE_AZURITE" = true ]; then
-    # Connect to the same network as Azurite
-    docker run -d \
-      --name blob-manager \
-      --network azurite-network \
-      -p $API_PORT:5000 \
-      $ENV_ARGS \
-      blob-manager:latest
-else
-    # Use default network if not using Azurite
-    docker run -d \
-      --name blob-manager \
-      -p $API_PORT:5000 \
-      $ENV_ARGS \
-      blob-manager:latest
-fi
+# Connect to the same network as Azurite
+docker run -d \
+  --name blob-manager \
+  --network azurite-network \
+  -p $API_PORT:5000 \
+  $ENV_ARGS \
+  blob-manager:latest
 
 # Wait for container to be ready
 echo "⏳ Waiting for Flask API to be ready..."
@@ -178,17 +145,15 @@ done
 if [ "$HEALTH_OK" = true ]; then
     echo "✅ API is healthy!"
     
-    # Check storage health if using Azurite
-    if [ "$USE_AZURITE" = true ]; then
-        echo "🏥 Checking storage connectivity..."
-        sleep 2
-        STORAGE_HEALTH=$(curl -s http://localhost:$API_PORT/health/storage || echo '{"ok":false}')
-        if echo "$STORAGE_HEALTH" | grep -q '"ok":true'; then
-            echo "✅ Storage is connected!"
-        else
-            echo "⚠️  Storage health check failed, but API is running. Storage operations may not work."
-            echo "   This is normal if Azurite needs more time to initialize."
-        fi
+    # Check storage health (Azurite)
+    echo "🏥 Checking storage connectivity..."
+    sleep 2
+    STORAGE_HEALTH=$(curl -s http://localhost:$API_PORT/health/storage || echo '{"ok":false}')
+    if echo "$STORAGE_HEALTH" | grep -q '"ok":true'; then
+        echo "✅ Storage is connected!"
+    else
+        echo "⚠️  Storage health check failed, but API is running. Storage operations may not work."
+        echo "   This is normal if Azurite needs more time to initialize."
     fi
     
     echo ""
@@ -197,9 +162,7 @@ if [ "$HEALTH_OK" = true ]; then
     echo "🌐 API is running at: http://localhost:$API_PORT"
     echo "📋 Health check: curl http://localhost:$API_PORT/health"
     echo "📦 List blobs: curl http://localhost:$API_PORT/api/blobs"
-    if [ "$USE_AZURITE" = true ]; then
-        echo "💾 Azurite is running on ports 10000-10002"
-    fi
+    echo "💾 Azurite is running on ports 10000-10002"
     
     # Setup and start frontend
     if [ "${SKIP_FRONTEND:-false}" != "true" ]; then
