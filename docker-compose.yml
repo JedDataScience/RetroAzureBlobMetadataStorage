@@ -1,17 +1,15 @@
 services:
-  # Azurite (Local Azure Storage Emulator) - OPTIONAL
-  # Uncomment this section if you want to use Azurite for local development
-  # Comment out or remove when using real Azure Storage
-  # azurite:
-  #   image: mcr.microsoft.com/azure-storage/azurite
-  #   container_name: azurite
-  #   command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
-  #   ports:
-  #     - "11000:10000"
-  #     - "11001:10001"
-  #     - "11002:10002"
-  #   volumes:
-  #     - azurite_data:/data
+  # Azurite (Local Azure Storage Emulator) - Required for local development
+  azurite:
+    image: mcr.microsoft.com/azure-storage/azurite
+    container_name: azurite
+    command: azurite --blobHost 0.0.0.0 --queueHost 0.0.0.0 --tableHost 0.0.0.0
+    ports:
+      - "10000:10000"
+      - "10001:10001"
+      - "10002:10002"
+    volumes:
+      - azurite_data:/data
 
   web:
     build: ./web
@@ -28,11 +26,10 @@ services:
       - SAS_EXPIRY_MINUTES=${SAS_EXPIRY_MINUTES}
       - DEFAULT_PROJECT_TAG=${DEFAULT_PROJECT_TAG}
       - ACCOUNT_KEY=${ACCOUNT_KEY}
-      - AZURITE_BLOB_HOST_PORT=${AZURITE_BLOB_HOST_PORT:-11000}
-    # Uncomment if using Azurite for local development
-    # depends_on:
-    #   azurite:
-    #     condition: service_started
+      - AZURITE_BLOB_HOST_PORT=${AZURITE_BLOB_HOST_PORT:-10000}
+    depends_on:
+      azurite:
+        condition: service_started
 
   frontend:
     build:
@@ -46,5 +43,5 @@ services:
     depends_on:
       - web
 
-# volumes:
-#   azurite_data:
+volumes:
+  azurite_data:
