@@ -147,7 +147,7 @@ curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5001/api/blobs
 curl http://localhost:5001/api/blobs/your-file-name.pdf
 ```
 
-## 4) Production Deployment (Optional)
+## 4) Production Cloud Deployment (Optional)
 
 > **⚠️ Important**: This project is **designed primarily for local development** using Azurite. The deployment instructions below are for advanced users who want to deploy to Azure cloud services for production use. For most users, local development with Azurite is sufficient and recommended.
 
@@ -218,7 +218,87 @@ For production deployment, configure these environment variables:
 3. Verify frontend can connect to API
 4. Test file upload and metadata operations
 
-## 5) Design Decisions
+## 5) Testing
+
+The project includes smoke tests in the `tests/` directory to verify basic API functionality. These tests are designed to work with Azurite (local Azure Storage emulator) and require no Azure subscription.
+
+### Prerequisites
+
+1. **Install test dependencies:**
+   ```bash
+   pip install -r tests/requirements.txt
+   ```
+   
+   Or install manually:
+   ```bash
+   pip install pytest requests
+   ```
+
+2. **Ensure the API is running:**
+   The tests require the Flask API to be running. You can start it using:
+   ```bash
+   # Using the run.sh script (recommended)
+   ./run.sh
+   ```
+
+### Running Tests
+
+Navigate to the `tests/` directory and run:
+
+```bash
+cd tests
+
+# Run all tests
+pytest test_smoke.py -v
+
+# Run with API URL override (if API is on different port)
+API_BASE_URL=http://localhost:5001 pytest test_smoke.py -v
+
+# Run a specific test
+pytest test_smoke.py::test_health_endpoint -v
+
+```
+
+### Test Coverage
+
+The smoke tests verify:
+- ✅ Health endpoint functionality (`/health`)
+- ✅ Storage connectivity (`/health/storage`)
+- ✅ List blobs endpoint (`/api/blobs`)
+- ✅ File upload functionality (`POST /api/blobs`)
+- ✅ Error handling for invalid requests
+- ✅ CORS configuration
+
+### Test Behavior
+
+- **Automatic API Detection**: Tests automatically wait for the API to be ready (up to 30 seconds)
+- **Test File Creation**: Test files are created automatically if needed
+- **Cleanup**: Uploaded test files are cleaned up after tests complete
+- **Skip on Failure**: Tests will skip if the API is not available (rather than failing)
+
+### Example Output
+
+```bash
+$ cd tests && pytest test_smoke.py -v
+
+test_smoke.py::test_health_endpoint PASSED
+test_smoke.py::test_storage_health_endpoint PASSED
+test_smoke.py::test_list_blobs_endpoint PASSED
+test_smoke.py::test_api_info_endpoint PASSED
+test_smoke.py::test_upload_endpoint PASSED
+test_smoke.py::test_cors_headers PASSED
+test_smoke.py::test_error_handling PASSED
+
+========= 7 passed in 2.34s =========
+```
+
+### Troubleshooting
+
+- **API not found**: Make sure the API is running on `http://localhost:5001` (or set `API_BASE_URL` environment variable)
+- **Connection errors**: Verify Azurite is running and the API container is connected to the `azurite-network`
+- **Import errors**: Ensure test dependencies are installed: `pip install -r tests/requirements.txt`
+
+## 6) Design Decisions
 
 ### Why Flask?
 
@@ -302,7 +382,7 @@ Azurite was chosen because:
 - Local development only - data stored in Docker containers
 - Data is ephemeral unless using Docker volumes for Azurite
 
-## 6) Results & Evaluation
+## 7) Results & Evaluation
 
 ### Performance Notes
 
@@ -339,7 +419,7 @@ python -m pytest test_smoke.py -v
 - View files in browser
 - Delete blobs and verify removal
 
-## 7) What's Next
+## 8) What's Next
 
 ### Planned Improvements
 
@@ -360,7 +440,7 @@ python -m pytest test_smoke.py -v
 1. **File Sharing**: Generate shareable links with expiration (local network)
 2. **Analytics Dashboard**: Usage statistics and storage analytics
 
-## 8) Links & Resources
+## 9) Links & Resources
 
 - **GitHub Repository**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
 - **My Public Cloud Version**:
