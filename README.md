@@ -16,7 +16,7 @@ This project implements several key concepts from the course modules:
 
 2. **Cloud Storage Integration**: The project integrates with Azurite (Azure Storage emulator) for local development, demonstrating cloud storage patterns, SAS token generation for secure access, and metadata management. The same codebase can work with real Azure Blob Storage when deployed to the cloud.
 
-3. **Containerization**: The application is fully containerized using Docker, demonstrating container-based deployment, environment variable management, and reproducible builds.
+3. **Containerization**: The application is **fully containerized** using Docker - all services (backend API, frontend, and Azurite) run in containers, demonstrating container-based deployment, environment variable management, and reproducible builds. No host dependencies required beyond Docker.
 
 ### Architecture Diagram
 
@@ -50,21 +50,17 @@ The architecture consists of:
 
 ### Prerequisites
 
-- Docker (required - handles all Python dependencies automatically and runs Azurite)
-- Node.js 20+ and pnpm (for running the frontend)
+- **Docker** (required - all services(Flask, Node.js, Azurite) run in containers)
 - Optional: Python 3.8+ and pip (only needed if running tests locally without Docker)
 
-**Note**: This project is **designed primarily for local development** using Azurite (Azure Storage emulator), which requires no Azure subscription or cloud resources. Cloud deployment instructions are provided in the Deployment section for users who want to deploy to production.
+**Note**: This project is **fully containerized** and **designed primarily for local development** using Azurite (Azure Storage emulator), which requires no Azure subscription or cloud resources. All dependencies (Python, Node.js, etc.) are handled automatically by Docker. Cloud deployment instructions are provided in the Deployment section for users who want to deploy to production.
 
 ### Installing Dependencies
 
-**Python Dependencies:**
-- Automatically handled by Docker during container build (no manual installation needed)
-- If running tests locally without Docker: `pip install -r requirements.txt`
-
-**Frontend Dependencies:**
-- Automatically installed by `run.sh` if missing
-- Or manually: `cd code && pnpm install`
+**All Dependencies:**
+- Automatically handled by Docker during container builds (no manual installation needed)
+- Python dependencies: Installed in the backend container
+- Node.js dependencies: Installed in the frontend container
 
 ### Quick Start (Recommended)
 
@@ -81,9 +77,10 @@ chmod +x run.sh
 The script automatically:
 - Starts Azurite (Azure Storage emulator) in a Docker container
 - Builds and starts the Flask API container (configured to use Azurite)
-- Installs frontend dependencies (if needed)
-- Starts the Next.js frontend dev server
+- Builds and starts the Next.js frontend container
 - Verifies all services are healthy
+
+**All services run in Docker containers** - no need to install Node.js, Python, or any other dependencies on your host machine!
 
 
 ### Manual Setup
@@ -105,9 +102,18 @@ docker run --rm -p 5001:5000 \
 #### Frontend
 
 ```bash
-cd code
-pnpm install
-NEXT_PUBLIC_API_URL=http://localhost:5001 pnpm dev
+# Build the frontend Docker image
+docker build -t blob-frontend:latest \
+  --build-arg NEXT_PUBLIC_API_URL=http://localhost:5001 \
+  -f code/Dockerfile ./code
+
+# Run the frontend container
+docker run -d \
+  --name blob-frontend \
+  --network azurite-network \
+  -p 3000:3000 \
+  -e NEXT_PUBLIC_API_URL=http://localhost:5001 \
+  blob-frontend:latest
 ```
 
 Access the frontend at http://localhost:3000
@@ -149,7 +155,7 @@ curl http://localhost:5001/api/blobs/your-file-name.pdf
 
 ## 4) Production Cloud Deployment (Optional)
 
-> **⚠️ Important**: This project is **designed primarily for local development** using Azurite. The deployment instructions below are for advanced users who want to deploy to Azure cloud services for production use. For most users, local development with Azurite is sufficient and recommended.
+> **Important**: This project is **designed primarily for local development** using Azurite. The deployment instructions below are for advanced users who want to deploy to Azure cloud services for production use. For most users, local development with Azurite is sufficient and recommended.
 
 ### Overview
 
@@ -263,12 +269,12 @@ pytest test_smoke.py::test_health_endpoint -v
 ### Test Coverage
 
 The smoke tests verify:
-- ✅ Health endpoint functionality (`/health`)
-- ✅ Storage connectivity (`/health/storage`)
-- ✅ List blobs endpoint (`/api/blobs`)
-- ✅ File upload functionality (`POST /api/blobs`)
-- ✅ Error handling for invalid requests
-- ✅ CORS configuration
+- Health endpoint functionality (`/health`)
+- Storage connectivity (`/health/storage`)
+- List blobs endpoint (`/api/blobs`)
+- File upload functionality (`POST /api/blobs`)
+- Error handling for invalid requests
+- CORS configuration
 
 ### Test Behavior
 
