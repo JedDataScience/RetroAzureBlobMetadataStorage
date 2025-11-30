@@ -220,7 +220,8 @@ For production deployment, configure these environment variables:
 
 ## 5) Testing
 
-The project includes smoke tests in the `tests/` directory to verify basic API functionality. These tests are designed to work with Azurite (local Azure Storage emulator) and require no Azure subscription.
+I have included a image in assets folder that you can use to test the upload. The project includes smoke tests in the `tests/` directory to verify basic API functionality. These tests are designed to work with Azurite (local Azure Storage emulator) and require no Azure subscription.
+
 
 ### Prerequisites
 
@@ -413,7 +414,7 @@ python -m pytest test_smoke.py -v
 ```
 
 **Manual Testing:**
-- Upload various file types (images, PDFs, documents)
+- Upload various file types (images, PDFs, documents). Can use the one provided in assets!
 - Verify files appear in blob list
 - Edit metadata and verify persistence
 - View files in browser
