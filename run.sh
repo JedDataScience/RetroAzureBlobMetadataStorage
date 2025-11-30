@@ -9,7 +9,7 @@ set -e  # Exit on error
 # Track frontend process for cleanup
 FRONTEND_PID=""
 
-echo "🚀 Azure Blob Metadata Manager - Starting..."
+echo "Azure Blob Metadata Manager - Starting..."
 
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
@@ -33,10 +33,10 @@ fi
 # This project uses Azurite for local development only
 USE_AZURITE=true
 ENV_ARGS="-e BLOB_CONTAINER=uploads"
-echo "📦 Using Azurite (Azure Storage emulator) for local development"
+echo "Using Azurite (Azure Storage emulator) for local development"
 
 # Start Azurite (Azure Storage emulator) for local development
-echo "📦 Starting Azurite (Azure Storage emulator)..."
+echo "Starting Azurite (Azure Storage emulator)..."
 
 # Create a Docker network for container communication (if it doesn't exist)
 docker network create azurite-network 2>/dev/null || true
@@ -73,7 +73,7 @@ AZURITE_CONN_STR="DefaultEndpointsProtocol=http;AccountName=devstoreaccount1;Acc
 ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR -e BLOB_CONTAINER=uploads"
 
 # Build the Docker image
-echo "📦 Building Flask API Docker image..."
+echo "Building Flask API Docker image..."
 docker build -t blob-manager:latest -f web/Dockerfile ./web
 
 # Stop and remove existing container if it exists
@@ -117,7 +117,7 @@ if lsof -Pi :$API_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
 fi
 
 # Run the Flask API container
-echo "🏃 Starting Flask API container on port $API_PORT..."
+echo "Starting Flask API container on port $API_PORT..."
 # Connect to the same network as Azurite
 docker run -d \
   --name blob-manager \
@@ -131,7 +131,7 @@ echo "⏳ Waiting for Flask API to be ready..."
 sleep 5
 
 # Check health
-echo "🏥 Checking API health..."
+echo "Checking API health..."
 HEALTH_OK=false
 for i in {1..10}; do
     if curl -s http://localhost:$API_PORT/health > /dev/null 2>&1; then
@@ -146,7 +146,7 @@ if [ "$HEALTH_OK" = true ]; then
     echo "✅ API is healthy!"
     
     # Check storage health (Azurite)
-    echo "🏥 Checking storage connectivity..."
+    echo "Checking storage connectivity..."
     sleep 2
     STORAGE_HEALTH=$(curl -s http://localhost:$API_PORT/health/storage || echo '{"ok":false}')
     if echo "$STORAGE_HEALTH" | grep -q '"ok":true'; then
@@ -159,22 +159,22 @@ if [ "$HEALTH_OK" = true ]; then
     echo ""
     echo "🎉 Backend is running!"
     echo ""
-    echo "🌐 API is running at: http://localhost:$API_PORT"
-    echo "📋 Health check: curl http://localhost:$API_PORT/health"
-    echo "📦 List blobs: curl http://localhost:$API_PORT/api/blobs"
-    echo "💾 Azurite is running on ports 10000-10002"
+    echo "API is running at: http://localhost:$API_PORT"
+    echo "Health check: curl http://localhost:$API_PORT/health"
+    echo "List blobs: curl http://localhost:$API_PORT/api/blobs"
+    echo "Azurite is running on ports 10000-10002"
     
     # Setup and start frontend
     if [ "${SKIP_FRONTEND:-false}" != "true" ]; then
         echo ""
-        echo "🎨 Setting up frontend..."
+        echo "Setting up frontend..."
         
         # Check if frontend dependencies are installed
         if [ ! -f "code/package.json" ]; then
             echo "⚠️  Warning: code/package.json not found. Skipping frontend setup."
             SKIP_FRONTEND_START=true
         elif [ ! -d "code/node_modules" ]; then
-            echo "📦 Installing frontend dependencies..."
+            echo "Installing frontend dependencies..."
             cd code
             if [ "$PACKAGE_MANAGER" = "pnpm" ]; then
                 pnpm install || {
@@ -218,7 +218,7 @@ if [ "$HEALTH_OK" = true ]; then
         fi
         
         if [ "${SKIP_FRONTEND_START:-false}" != "true" ]; then
-            echo "🚀 Starting frontend dev server..."
+            echo "Starting frontend dev server..."
             cd code
             # Start frontend in background and capture PID
             NEXT_PUBLIC_API_URL=http://localhost:$API_PORT $PACKAGE_MANAGER dev > /tmp/frontend.log 2>&1 &
@@ -229,7 +229,7 @@ if [ "$HEALTH_OK" = true ]; then
             echo $FRONTEND_PID > /tmp/frontend.pid
             
             # Wait a bit for frontend to start
-            echo "⏳ Waiting for frontend to start..."
+            echo "Waiting for frontend to start..."
             sleep 5
             
             # Check if frontend is running
@@ -249,25 +249,25 @@ if [ "$HEALTH_OK" = true ]; then
     fi
     
     echo ""
-    echo "🎉 Application is running!"
+    echo "Application is running!"
     echo ""
-    echo "🌐 API: http://localhost:$API_PORT"
+    echo "API: http://localhost:$API_PORT"
     if [ "${SKIP_FRONTEND:-false}" != "true" ] && [ "${SKIP_FRONTEND_START:-false}" != "true" ] && [ -n "$FRONTEND_PID" ]; then
-        echo "🎨 Frontend: http://localhost:3000"
+        echo "Frontend: http://localhost:3000"
     elif [ "${SKIP_FRONTEND:-false}" != "true" ]; then
-        echo "🎨 Frontend: http://localhost:3000 (may already be running)"
+        echo "Frontend: http://localhost:3000 (may already be running)"
     fi
     echo ""
-    echo "📝 View API logs: docker logs -f blob-manager"
+    echo "View API logs: docker logs -f blob-manager"
     if [ "$USE_AZURITE" = true ]; then
-        echo "📝 View Azurite logs: docker logs -f azurite"
+        echo "View Azurite logs: docker logs -f azurite"
     fi
     if [ -n "$FRONTEND_PID" ]; then
-        echo "📝 View frontend logs: tail -f /tmp/frontend.log"
+        echo "View frontend logs: tail -f /tmp/frontend.log"
         echo "🛑 Stop frontend: kill $FRONTEND_PID"
         echo "   Or: kill \$(cat /tmp/frontend.pid) 2>/dev/null || true"
     elif [ -f /tmp/frontend.pid ]; then
-        echo "📝 View frontend logs: tail -f /tmp/frontend.log"
+        echo "View frontend logs: tail -f /tmp/frontend.log"
         echo "🛑 Stop frontend: kill \$(cat /tmp/frontend.pid) 2>/dev/null || true"
     fi
     echo "🛑 Stop all services: docker stop blob-manager azurite"
