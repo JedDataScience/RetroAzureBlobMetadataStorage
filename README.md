@@ -329,7 +329,7 @@ Azurite was chosen because:
 
 **Alternatives Considered:**
 - **Real Azure Blob Storage**: Requires subscription and cloud resources (not needed for local dev)
-- **MongoDB**: Overkill for simple file storage needs and didnt want my images/files stores in this way. I wanted an infinite Blob :0. 
+- **MongoDB**: Overkill for simple file storage needs and didnt want my images/files stored in this way. I wanted an infinite Blob :0. 
 
 ### Tradeoffs
 
@@ -368,7 +368,7 @@ Azurite was chosen because:
 
 **Network Security:**
 - CORS configured to allow frontend connections
-- Security headers (CSP, HSTS, X-Frame-Options) implemented
+- Security headers (CSP, HSTS) implemented
 - Local development runs on localhost (production uses HTTPS when deployed)
 
 ### Operations
@@ -387,7 +387,6 @@ Azurite was chosen because:
 - No file versioning or backup
 - Metadata editing requires blob re-upload (Azure Storage API limitation)
 - Local development only - data stored in Docker containers
-- Data is ephemeral unless using Docker volumes for Azurite
 
 ## 7) Results & Evaluation
 
@@ -437,10 +436,8 @@ python -m pytest test_smoke.py -v
 
 ### Refactors
 
-1. **Frontend Containerization**: Add Dockerfile for frontend to enable full containerized local development
-2. **API Testing**: Expand test coverage with unit and integration tests
-3. **Error Handling**: More detailed error messages and recovery mechanisms
-4. **Documentation**: API documentation with OpenAPI/Swagger
+1. **API Testing**: Expand test coverage with unit and integration tests
+2. **Error Handling**: More detailed error messages and recovery mechanisms
 
 ### Stretch Features
 
