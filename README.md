@@ -363,6 +363,9 @@ python -m pytest test_smoke.py -v
 ## 8) Links & Resources
 
 - **GitHub Repository**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
+- **My Public Cloud Version**:
+  - Frontend: https://victorious-wave-0fd8b771e.3.azurestaticapps.net
+  - API: https://retro-azure-metadata-api.wonderfulisland-bcb9cf0e.westus2.azurecontainerapps.io
 
 ## License
 
