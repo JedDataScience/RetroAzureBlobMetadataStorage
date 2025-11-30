@@ -2,9 +2,9 @@
 
 ## 1) Executive Summary
 
-**Problem:** Organizations and developers need an efficient way to manage files stored in cloud storage systems, particularly Azure Blob Storage. Traditional cloud storage interfaces are often complex and don't provide easy ways to view, organize, and manage file metadata. Users need a simple, web-based interface to upload files, view their contents, and edit metadata without navigating complex cloud portals.
+**Problem:** Organizations and developers need an efficient way to manage files stored in cloud storage systems, particularly Azure Blob Storage. Traditional cloud storage interfaces are often complex and don't provide easy ways to view, organize, and manage file metadata. Users need a simple, web-based interface to upload files, view their contents, and edit metadata without navigating complex cloud portals. The company that we are working with whats the web-based interface to match the companies theme of 80s retro. 
 
-**Solution:** Azure Blob Metadata Manager is a modern web application that provides a user-friendly terminal-style interface for managing Azure Blob Storage. The application allows users to upload files, view them directly in the browser, list all stored files with their metadata, and edit blob metadata through an intuitive web interface. Built with Flask (Python) for the REST API and Next.js for the frontend, the application is fully containerized and **designed primarily for local development** using Docker with Azurite (Azure Storage emulator). The application can also be deployed to Azure cloud services for production use (see Deployment section).
+**Solution:** Azure Blob Metadata Manager is a modern web application that provides a user-friendly terminal-style interface for managing Azure Blob Storage. The application allows users to upload files, view them directly in the browser, list all stored files with their metadata, and edit blob metadata through an intuitive retro style web interface. Built with Flask (Python) for the REST API and Next.js for the frontend, the application is fully containerized and **designed primarily for local development** using Docker with Azurite (Azure Storage emulator). The application can also be deployed to Azure cloud services for production use (see Deployment section).
 
 ## 2) System Overview
 
@@ -18,14 +18,12 @@ This project implements several key concepts from the course modules:
 
 3. **Containerization**: The application is fully containerized using Docker, demonstrating container-based deployment, environment variable management, and reproducible builds.
 
-4. **Web Application Architecture**: The project demonstrates a modern three-tier architecture with a React/Next.js frontend, Flask API backend, and Azurite (Azure Storage emulator) as the data layer for local development. The architecture supports deployment to Azure cloud services.
-
 ### Architecture Diagram
 
 ![Architecture Diagram](assets/architecture.png)
 
 The architecture consists of:
-- **Frontend Layer**: Next.js application with React 19 and TypeScript, providing a terminal-style user interface
+- **Frontend Layer**: Next.js application with React 19 and TypeScript, providing a retro usable user interface
 - **API Layer**: Flask REST API running in a Docker container, handling all blob operations
 - **Storage Layer**: 
   - **Local Development**: Azurite (Azure Storage emulator) running in Docker
@@ -56,7 +54,7 @@ The architecture consists of:
 - Node.js 20+ and pnpm (for running the frontend)
 - Optional: Python 3.8+ and pip (only needed if running tests locally without Docker)
 
-**Note**: This project is **designed primarily for local development** using Azurite (Azure Storage emulator), which requires no Azure subscription or cloud resources. Cloud deployment instructions are provided in the Deployment section for advanced users who want to deploy to production.
+**Note**: This project is **designed primarily for local development** using Azurite (Azure Storage emulator), which requires no Azure subscription or cloud resources. Cloud deployment instructions are provided in the Deployment section for users who want to deploy to production.
 
 ### Installing Dependencies
 
@@ -87,7 +85,6 @@ The script automatically:
 - Starts the Next.js frontend dev server
 - Verifies all services are healthy
 
-**Note**: The application uses Azurite for local development by default. No Azure subscription or cloud resources are required. For production deployment to Azure, see the Deployment section below.
 
 ### Manual Setup
 
@@ -150,7 +147,7 @@ curl -X POST -F "file=@/path/to/your/file.pdf" http://localhost:5001/api/blobs
 curl http://localhost:5001/api/blobs/your-file-name.pdf
 ```
 
-## 4) Deployment (Optional - Advanced)
+## 4) Production Deployment (Optional)
 
 > **⚠️ Important**: This project is **designed primarily for local development** using Azurite. The deployment instructions below are for advanced users who want to deploy to Azure cloud services for production use. For most users, local development with Azurite is sufficient and recommended.
 
@@ -168,32 +165,8 @@ If you want to deploy the application to Azure cloud services (optional), it can
 - Azure Container Apps environment
 - Azure Static Web Apps resource
 
-### Automated Deployment (CI/CD)
 
-Deployment can be automated via GitHub Actions. The workflow (`.github/workflows/azure-deploy.yml`) triggers on pushes to `main` branch and deploys:
-
-1. **Frontend** → Azure Static Web Apps
-2. **Backend API** → Azure Container Apps
-
-#### Required GitHub Secrets
-
-Configure these secrets in your GitHub repository:
-
-- `AZURE_WEBAPP_PUBLISH_PROFILE`: Publish profile for Azure Web App/Container App
-- `AZURE_STATIC_WEB_APPS_API_TOKEN`: Deployment token for Static Web Apps
-- `NEXT_PUBLIC_API_URL`: Public URL of the deployed API
-
-#### Deployment Process
-
-1. Push to `main` branch or manually trigger workflow
-2. GitHub Actions builds and deploys:
-   - Frontend: Builds Next.js app and deploys to Static Web Apps
-   - Backend: Builds Docker image and deploys to Container Apps
-3. Services are automatically configured with environment variables
-
-### Manual Deployment
-
-#### Deploy Backend API to Azure Container Apps
+### Deploy Backend API to Azure Container Apps
 
 ```bash
 # Build Docker image
@@ -256,9 +229,7 @@ Flask was chosen for the API layer because:
 - **Containerization**: Flask applications containerize easily and run efficiently in Docker
 
 **Alternatives Considered:**
-- **FastAPI**: More modern but adds complexity; Flask is sufficient for this use case
-- **Django**: Too heavyweight for a simple REST API
-- **Express.js**: Would require Node.js expertise and doesn't align with course Python focus
+- **FastAPI**: More modern but adds complexity; Flask is sufficient for this use case.
 
 ### Why Azurite (Azure Storage Emulator)?
 
@@ -271,8 +242,7 @@ Azurite was chosen because:
 
 **Alternatives Considered:**
 - **Real Azure Blob Storage**: Requires subscription and cloud resources (not needed for local dev)
-- **Local File System**: Doesn't demonstrate cloud storage patterns
-- **MongoDB GridFS**: Overkill for simple file storage needs
+- **MongoDB**: Overkill for simple file storage needs and didnt want my images/files stores in this way. I wanted an infinite Blob :0. 
 
 ### Tradeoffs
 
@@ -325,11 +295,6 @@ Azurite was chosen because:
 - Health endpoints (`/health`, `/health/storage`) for basic monitoring
 - Container resource usage visible via Docker commands
 
-**Scaling Considerations:**
-- Stateless API design allows horizontal scaling (if needed)
-- Storage limited to local machine capacity
-- Suitable for local development and testing
-
 **Known Limitations:**
 - No user authentication (all users share the same storage)
 - No file versioning or backup
@@ -338,13 +303,6 @@ Azurite was chosen because:
 - Data is ephemeral unless using Docker volumes for Azurite
 
 ## 6) Results & Evaluation
-
-### Screenshots
-
-See `assets/` directory for:
-- Application screenshots showing the terminal-style interface
-- Architecture diagram
-- Example metadata editing workflow
 
 ### Performance Notes
 
@@ -389,9 +347,6 @@ python -m pytest test_smoke.py -v
 2. **File Versioning**: Implement version history for uploaded files
 3. **Search Functionality**: Full-text search across blob names and metadata
 4. **Batch Operations**: Upload/delete multiple files at once
-5. **File Preview**: Enhanced preview for more file types
-6. **Metadata Templates**: Pre-defined metadata schemas for common use cases
-7. **Data Persistence**: Add Docker volumes for Azurite to persist data across restarts
 
 ### Refactors
 
@@ -402,22 +357,12 @@ python -m pytest test_smoke.py -v
 
 ### Stretch Features
 
-1. **Real-time Updates**: WebSocket support for live blob list updates
-2. **File Sharing**: Generate shareable links with expiration (local network)
-3. **Analytics Dashboard**: Usage statistics and storage analytics
-4. **Data Export**: Export blob data and metadata for backup
+1. **File Sharing**: Generate shareable links with expiration (local network)
+2. **Analytics Dashboard**: Usage statistics and storage analytics
 
 ## 8) Links & Resources
 
 - **GitHub Repository**: https://github.com/JedDataScience/RetroAzureBlobMetadataStorage
-
-### Additional Documentation
-
-- `docker-compose.yml`: Multi-container setup for local development with Azurite
-- `web/Dockerfile`: Container build configuration for the Flask API
-- `run.sh`: One-command launcher script for local development
-- `.github/workflows/azure-deploy.yml`: CI/CD deployment workflow (optional, for production deployment)
-- `tests/`: Test suite and smoke tests
 
 ## License
 
