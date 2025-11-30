@@ -1,13 +1,13 @@
 #!/bin/bash
 
 # Azure Blob Metadata Manager - Local Development Launcher
-# This script builds and runs the Flask API with Azurite (Azure Storage emulator) in Docker containers
-# and starts the Next.js frontend for local development only
+# This script builds and runs all services in Docker containers:
+# - Azurite (Azure Storage emulator)
+# - Flask API backend
+# - Next.js frontend
+# All services are fully containerized - no host dependencies required beyond Docker
 
 set -e  # Exit on error
-
-# Track frontend process for cleanup
-FRONTEND_PID=""
 
 echo "Azure Blob Metadata Manager - Starting..."
 
@@ -17,18 +17,9 @@ if ! command -v docker &> /dev/null; then
     exit 1
 fi
 
-# Check if Node.js package manager is installed (pnpm, npm, or yarn)
-if command -v pnpm &> /dev/null; then
-    PACKAGE_MANAGER="pnpm"
-elif command -v npm &> /dev/null; then
-    PACKAGE_MANAGER="npm"
-elif command -v yarn &> /dev/null; then
-    PACKAGE_MANAGER="yarn"
-else
-    echo "⚠️  Warning: No Node.js package manager (pnpm/npm/yarn) found."
-    echo "   Frontend will not be started. Install Node.js to enable the frontend."
-    SKIP_FRONTEND=true
-fi
+# Frontend is now containerized, so Node.js is not required on the host
+# But we'll check if user wants to skip frontend
+SKIP_FRONTEND=${SKIP_FRONTEND:-false}
 
 # This project uses Azurite for local development only
 USE_AZURITE=true
@@ -164,86 +155,66 @@ if [ "$HEALTH_OK" = true ]; then
     echo "List blobs: curl http://localhost:$API_PORT/api/blobs"
     echo "Azurite is running on ports 10000-10002"
     
-    # Setup and start frontend
+    # Build and start frontend container
     if [ "${SKIP_FRONTEND:-false}" != "true" ]; then
         echo ""
-        echo "Setting up frontend..."
+        echo "Building and starting frontend container..."
         
-        # Check if frontend dependencies are installed
-        if [ ! -f "code/package.json" ]; then
-            echo "⚠️  Warning: code/package.json not found. Skipping frontend setup."
+        # Check if frontend Dockerfile exists
+        if [ ! -f "code/Dockerfile" ]; then
+            echo "⚠️  Warning: code/Dockerfile not found. Skipping frontend setup."
             SKIP_FRONTEND_START=true
-        elif [ ! -d "code/node_modules" ]; then
-            echo "Installing frontend dependencies..."
-            cd code
-            if [ "$PACKAGE_MANAGER" = "pnpm" ]; then
-                pnpm install || {
-                    echo "❌ Failed to install frontend dependencies with pnpm"
-                    cd ..
-                    SKIP_FRONTEND_START=true
-                }
-            elif [ "$PACKAGE_MANAGER" = "npm" ]; then
-                npm install || {
-                    echo "❌ Failed to install frontend dependencies with npm"
-                    cd ..
-                    SKIP_FRONTEND_START=true
-                }
-            elif [ "$PACKAGE_MANAGER" = "yarn" ]; then
-                yarn install || {
-                    echo "❌ Failed to install frontend dependencies with yarn"
-                    cd ..
-                    SKIP_FRONTEND_START=true
-                }
-            fi
-            # Make sure we're back in the project root
-            cd ..
         else
-            echo "✅ Frontend dependencies already installed"
-        fi
-        
-        # Check if port 3000 is available
-        FRONTEND_PORT=3000
-        if lsof -Pi :$FRONTEND_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
-            echo "⚠️  Port $FRONTEND_PORT is already in use."
-            # Try to find if it's a Next.js dev server
-            EXISTING_PROCESS=$(lsof -ti :$FRONTEND_PORT)
-            if [ -n "$EXISTING_PROCESS" ]; then
-                echo "   Found process using port 3000. Frontend may already be running."
-                echo "   If you want to restart it, stop the existing process first."
-                SKIP_FRONTEND_START=true
-            else
-                echo "   Using existing frontend on port 3000"
-                SKIP_FRONTEND_START=true
+            # Check if port 3000 is available
+            FRONTEND_PORT=3000
+            if lsof -Pi :$FRONTEND_PORT -sTCP:LISTEN -t >/dev/null 2>&1 ; then
+                echo "⚠️  Port $FRONTEND_PORT is already in use."
+                # Check if it's a Docker container
+                CONFLICTING_CONTAINER=$(docker ps --filter "publish=$FRONTEND_PORT" --format "{{.Names}}" | head -1)
+                if [ -n "$CONFLICTING_CONTAINER" ]; then
+                    echo "   Found Docker container using port: $CONFLICTING_CONTAINER"
+                    echo "   Stopping conflicting container..."
+                    docker stop "$CONFLICTING_CONTAINER" 2>/dev/null || true
+                    docker rm "$CONFLICTING_CONTAINER" 2>/dev/null || true
+                    sleep 2
+                else
+                    echo "   Port $FRONTEND_PORT is in use by a non-Docker process."
+                    echo "   Skipping frontend startup."
+                    SKIP_FRONTEND_START=true
+                fi
             fi
-        fi
-        
-        if [ "${SKIP_FRONTEND_START:-false}" != "true" ]; then
-            echo "Starting frontend dev server..."
-            cd code
-            # Start frontend in background and capture PID
-            NEXT_PUBLIC_API_URL=http://localhost:$API_PORT $PACKAGE_MANAGER dev > /tmp/frontend.log 2>&1 &
-            FRONTEND_PID=$!
-            cd ..
             
-            # Save PID to a file for later reference
-            echo $FRONTEND_PID > /tmp/frontend.pid
-            
-            # Wait a bit for frontend to start
-            echo "Waiting for frontend to start..."
-            sleep 5
-            
-            # Check if frontend is running
-            if ps -p $FRONTEND_PID > /dev/null 2>&1; then
-                # Check if port 3000 is responding
-                if curl -s http://localhost:3000 > /dev/null 2>&1; then
+            if [ "${SKIP_FRONTEND_START:-false}" != "true" ]; then
+                # Build frontend Docker image
+                echo "Building frontend Docker image..."
+                docker build -t blob-frontend:latest \
+                  --build-arg NEXT_PUBLIC_API_URL=http://localhost:$API_PORT \
+                  -f code/Dockerfile ./code
+                
+                # Stop and remove existing frontend container if it exists
+                docker stop blob-frontend 2>/dev/null || true
+                docker rm blob-frontend 2>/dev/null || true
+                
+                # Run frontend container
+                echo "Starting frontend container on port $FRONTEND_PORT..."
+                docker run -d \
+                  --name blob-frontend \
+                  --network azurite-network \
+                  -p $FRONTEND_PORT:3000 \
+                  -e NEXT_PUBLIC_API_URL=http://localhost:$API_PORT \
+                  blob-frontend:latest
+                
+                # Wait for frontend to be ready
+                echo "Waiting for frontend to be ready..."
+                sleep 8
+                
+                # Check if frontend is responding
+                if curl -s http://localhost:$FRONTEND_PORT > /dev/null 2>&1; then
                     echo "✅ Frontend is running!"
                 else
-                    echo "⚠️  Frontend process started but may still be initializing..."
-                    echo "   Check logs: tail -f /tmp/frontend.log"
+                    echo "⚠️  Frontend container started but may still be initializing..."
+                    echo "   Check logs: docker logs -f blob-frontend"
                 fi
-            else
-                echo "⚠️  Frontend failed to start. Check logs: cat /tmp/frontend.log"
-                echo "   You can manually start it with: cd code && NEXT_PUBLIC_API_URL=http://localhost:$API_PORT $PACKAGE_MANAGER dev"
             fi
         fi
     fi
@@ -252,7 +223,7 @@ if [ "$HEALTH_OK" = true ]; then
     echo "Application is running!"
     echo ""
     echo "API: http://localhost:$API_PORT"
-    if [ "${SKIP_FRONTEND:-false}" != "true" ] && [ "${SKIP_FRONTEND_START:-false}" != "true" ] && [ -n "$FRONTEND_PID" ]; then
+    if [ "${SKIP_FRONTEND:-false}" != "true" ] && [ "${SKIP_FRONTEND_START:-false}" != "true" ]; then
         echo "Frontend: http://localhost:3000"
     elif [ "${SKIP_FRONTEND:-false}" != "true" ]; then
         echo "Frontend: http://localhost:3000 (may already be running)"
@@ -262,16 +233,12 @@ if [ "$HEALTH_OK" = true ]; then
     if [ "$USE_AZURITE" = true ]; then
         echo "View Azurite logs: docker logs -f azurite"
     fi
-    if [ -n "$FRONTEND_PID" ]; then
-        echo "View frontend logs: tail -f /tmp/frontend.log"
-        echo "🛑 Stop frontend: kill $FRONTEND_PID"
-        echo "   Or: kill \$(cat /tmp/frontend.pid) 2>/dev/null || true"
-    elif [ -f /tmp/frontend.pid ]; then
-        echo "View frontend logs: tail -f /tmp/frontend.log"
-        echo "🛑 Stop frontend: kill \$(cat /tmp/frontend.pid) 2>/dev/null || true"
+    if [ "${SKIP_FRONTEND:-false}" != "true" ] && [ "${SKIP_FRONTEND_START:-false}" != "true" ]; then
+        echo "View frontend logs: docker logs -f blob-frontend"
     fi
-    echo "🛑 Stop all services: docker stop blob-manager azurite"
-    echo "🧹 Remove all containers: docker rm blob-manager azurite"
+    echo ""
+    echo "🛑 Stop all services: docker stop blob-manager blob-frontend azurite 2>/dev/null || true"
+    echo "Remove all containers: docker rm blob-manager blob-frontend azurite 2>/dev/null || true"
 else
     echo "❌ Health check failed. Check logs with: docker logs blob-manager"
     exit 1
