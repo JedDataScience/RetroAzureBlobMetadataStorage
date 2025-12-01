@@ -9,7 +9,13 @@
 
 set -e  # Exit on error
 
+# Get the directory where this script is located
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Change to the script's directory so relative paths work correctly
+cd "$SCRIPT_DIR"
+
 echo "Azure Blob Metadata Manager - Starting..."
+echo "Working directory: $(pwd)"
 
 # Check if Docker is installed
 if ! command -v docker &> /dev/null; then
@@ -65,6 +71,11 @@ ENV_ARGS="-e AZURE_STORAGE_CONNECTION_STRING=$AZURITE_CONN_STR -e BLOB_CONTAINER
 
 # Build the Docker image
 echo "Building Flask API Docker image..."
+if [ ! -d "web" ]; then
+    echo "❌ Error: 'web' directory not found in $(pwd)"
+    echo "   Please run this script from the RetroAzureBlobMetadataStorage directory"
+    exit 1
+fi
 docker build -t blob-manager:latest -f web/Dockerfile ./web
 
 # Stop and remove existing container if it exists
@@ -162,7 +173,7 @@ if [ "$HEALTH_OK" = true ]; then
         
         # Check if frontend Dockerfile exists
         if [ ! -f "code/Dockerfile" ]; then
-            echo "⚠️  Warning: code/Dockerfile not found. Skipping frontend setup."
+            echo "⚠️  Warning: code/Dockerfile not found in $(pwd). Skipping frontend setup."
             SKIP_FRONTEND_START=true
         else
             # Check if port 3000 is available

@@ -18,26 +18,49 @@ app.secret_key = os.getenv("FLASK_SECRET") or os.getenv("FLASK_SECRET_KEY", "dev
 @app.after_request
 def add_security_headers(response):
     """Add security headers to all responses."""
-    # Upgrade insecure requests (HTTP to HTTPS) to prevent mixed content
-    # Allow all same-origin resources and upgrade insecure requests
-    # This is permissive enough for the API to work while still upgrading HTTP to HTTPS
-    csp_policy = (
-        "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
-        "style-src 'self' 'unsafe-inline'; "
-        "img-src 'self' data: https:; "
-        "font-src 'self' data:; "
-        "connect-src 'self' https:; "
-        "frame-ancestors 'none'; "
-        "upgrade-insecure-requests;"
+    # Determine if we're in production or development
+    # Check for production indicators (Azure deployment, HTTPS, etc.)
+    is_production = (
+        os.getenv("FLASK_ENV") == "production" or
+        os.getenv("ENVIRONMENT") == "production" or
+        os.getenv("WEBSITE_HOSTNAME") is not None  # Azure App Service sets this
     )
-    response.headers['Content-Security-Policy'] = csp_policy
-    # Additional security headers
+    
+    if is_production:
+        # Strict CSP for production (HTTPS only)
+        csp_policy = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: https:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' https:; "
+            "frame-ancestors 'none'; "
+            "upgrade-insecure-requests;"
+        )
+        response.headers['Content-Security-Policy'] = csp_policy
+        # Strict-Transport-Security (HSTS) - force HTTPS for 1 year
+        response.headers['Strict-Transport-Security'] = "max-age=31536000; includeSubDomains"
+    else:
+        # More permissive CSP for local development (allows HTTP for localhost)
+        # This allows images to load when served over HTTP in local development
+        csp_policy = (
+            "default-src 'self' http://localhost:* http://127.0.0.1:*; "
+            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: http: https:; "  # Allow HTTP images for local development
+            "font-src 'self' data:; "
+            "connect-src 'self' http://localhost:* http://127.0.0.1:* https:; "  # Allow HTTP connections
+            "frame-ancestors 'none'; "
+        )
+        response.headers['Content-Security-Policy'] = csp_policy
+        # Don't set HSTS in development (would force HTTPS even for localhost)
+    
+    # These headers are safe for both dev and production
     response.headers['X-Content-Type-Options'] = "nosniff"
     response.headers['X-Frame-Options'] = "DENY"
     response.headers['X-XSS-Protection'] = "1; mode=block"
-    # Strict-Transport-Security (HSTS) - force HTTPS for 1 year
-    response.headers['Strict-Transport-Security'] = "max-age=31536000; includeSubDomains"
+    
     return response
 
 
