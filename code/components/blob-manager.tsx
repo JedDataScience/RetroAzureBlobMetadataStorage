@@ -71,12 +71,12 @@ export function BlobManager() {
       })
       if (!response.ok) throw new Error("Failed to update metadata")
       
-      // Update local state - this is enough, no need to reload all blobs!
+      // Update local state
       setBlobs(blobs.map((blob) => (blob.id === blobId ? { ...blob, metadata } : blob)))
       if (selectedBlob?.id === blobId) {
         setSelectedBlob({ ...selectedBlob, metadata })
       }
-      // Removed: await loadBlobs() - unnecessary full reload that was causing slowness
+      await loadBlobs() // Refresh to get latest data
     } catch (err) {
       console.error("Error updating metadata:", err)
       alert("Failed to update metadata")
@@ -87,36 +87,19 @@ export function BlobManager() {
     if (!confirm("Are you sure you want to delete this blob?")) return
     
     try {
-      const deleteUrl = `${API_BASE_URL}/api/blobs/${encodeURIComponent(blobId)}`
-      console.log("Deleting blob:", deleteUrl)
-      
-      const response = await fetch(deleteUrl, {
+      const response = await fetch(`${API_BASE_URL}/api/blobs/${encodeURIComponent(blobId)}`, {
         method: "DELETE",
       })
+      if (!response.ok) throw new Error("Failed to delete blob")
       
-      console.log("Delete response status:", response.status, response.statusText)
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-        console.error("Delete failed:", errorData)
-        throw new Error(errorData.error || `Failed to delete blob: ${response.status} ${response.statusText}`)
-      }
-      
-      const result = await response.json().catch(() => ({ message: "Deleted" }))
-      console.log("Delete successful:", result)
-      
-      // Update local state immediately for better UX
       setBlobs(blobs.filter((blob) => blob.id !== blobId))
       if (selectedBlob?.id === blobId) {
         setSelectedBlob(null)
       }
-      
-      // Refresh to get updated list
-      await loadBlobs()
+      await loadBlobs() // Refresh
     } catch (err) {
       console.error("Error deleting blob:", err)
-      const errorMessage = err instanceof Error ? err.message : "Failed to delete blob"
-      alert(`Failed to delete blob: ${errorMessage}`)
+      alert("Failed to delete blob")
     }
   }
 

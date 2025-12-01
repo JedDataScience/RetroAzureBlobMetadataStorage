@@ -85,23 +85,16 @@ def is_azurite():
     return acct == "devstoreaccount1" or ("azurite" in blob_ep) or ("127.0.0.1:10000" in blob_ep)
 
 
-# Cache the BlobServiceClient for better performance
-_blob_service_client = None
-# Cache container existence checks
-_container_cache = set()
-
 def bsc() -> BlobServiceClient:
-    global _blob_service_client
-    if _blob_service_client is None:
-        _blob_service_client = BlobServiceClient.from_connection_string(
-            os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
-            retry_total=3,
-            retry_mode="exponential",
-            retry_backoff_factor=0.5,
-            connection_timeout=10,
-            read_timeout=30,
-        )
-    return _blob_service_client
+    # Use reasonable retries and timeouts for better performance
+    return BlobServiceClient.from_connection_string(
+        os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
+        retry_total=3,
+        retry_mode="exponential",
+        retry_backoff_factor=0.5,
+        connection_timeout=10,
+        read_timeout=30,
+    )
 
 
 def blob_base_url(account_name: str) -> str:
@@ -172,18 +165,11 @@ def make_sas(container: str, blob: str, minutes: int | None = None) -> str:
 
 def ensure_container_exists(container_name: str):
     """Ensure the container exists; create it if missing."""
-    # Check cache first - if we've verified it exists, skip the check
-    if container_name in _container_cache:
-        svc = bsc()
-        return svc.get_container_client(container_name)
-    
     svc = bsc()
     cc = svc.get_container_client(container_name)
     try:
         # Check if container exists (with reasonable timeout)
         cc.get_container_properties()
-        # Cache it - container exists
-        _container_cache.add(container_name)
         # For Azurite local testing, make container public for easier access
         if is_azurite():
             try:
@@ -194,8 +180,6 @@ def ensure_container_exists(container_name: str):
         try:
             # Create container if it doesn't exist
             cc.create_container()
-            # Cache it - container now exists
-            _container_cache.add(container_name)
             # Make container public for Azurite
             if is_azurite():
                 try:
@@ -353,10 +337,7 @@ def api_upload_blob():
             content_type = f.content_type or "application/octet-stream"
         
         # Upload with content type settings
-        # Use streaming upload for better performance
         content_settings = ContentSettings(content_type=content_type)
-        # Reset file pointer to beginning in case it was read
-        f.seek(0)
         blob_client.upload_blob(f, overwrite=True, content_settings=content_settings)
         
         return jsonify({"message": "Uploaded successfully", "filename": f.filename})
@@ -389,38 +370,31 @@ def api_update_metadata(blob_name):
 def api_delete_blob(blob_name):
     """API endpoint to delete a blob."""
     try:
+        logger.info(f"Attempting to delete blob: {blob_name}")
         service = bsc()
         container_name = os.getenv("BLOB_CONTAINER", os.getenv("AZURE_STORAGE_CONTAINER", "uploads"))
         blob_client = service.get_blob_client(container=container_name, blob=blob_name)
         
-        # Delete the blob - this is idempotent (safe to call even if blob doesn't exist)
-        # Use delete_snapshots='include' to handle snapshots gracefully
+        # Check if blob exists before attempting to delete
         try:
-            blob_client.delete_blob(delete_snapshots='include')
+            props = blob_client.get_blob_properties()
+            logger.info(f"Blob found: {blob_name}, size: {props.size}")
+        except Exception as e:
+            logger.error(f"Blob not found or cannot access: {blob_name}, error: {str(e)}")
+            return jsonify({"error": f"Blob not found: {blob_name}"}), 404
+        
+        # Delete the blob
+        try:
+            blob_client.delete_blob()
+            logger.info(f"Successfully deleted blob: {blob_name}")
             return jsonify({"message": "Blob deleted successfully"})
         except Exception as e:
-            error_msg = str(e)
-            error_code = getattr(e, 'error_code', None)
-            
-            # Check if error is because blob doesn't exist (which is OK for delete - idempotent)
-            if ("does not exist" in error_msg or 
-                "BlobNotFound" in error_msg or 
-                error_code == "BlobNotFound" or
-                "404" in error_msg):
-                return jsonify({"message": "Blob deleted successfully"})
-            else:
-                # Real error occurred
-                logger.error(f"Failed to delete blob {blob_name}: {error_msg}")
-                return jsonify({"error": f"Failed to delete blob: {error_msg}"}), 500
+            logger.error(f"Failed to delete blob {blob_name}: {str(e)}")
+            return jsonify({"error": f"Failed to delete blob: {str(e)}"}), 500
         
     except Exception as e:
-        error_msg = str(e)
-        # Check if it's a "not found" error (OK for delete operations)
-        if "does not exist" in error_msg or "BlobNotFound" in error_msg:
-            return jsonify({"message": "Blob deleted successfully"})
-        
-        logger.error(f"Error in delete endpoint for blob {blob_name}: {error_msg}")
-        return jsonify({"error": f"Internal server error: {error_msg}"}), 500
+        logger.error(f"Error in delete endpoint for blob {blob_name}: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 @app.get("/api/blobs/<path:blob_name>/url")
@@ -467,28 +441,21 @@ def api_view_blob(blob_name):
         if not content_type:
             content_type = "application/octet-stream"
         
-        # Stream blob data for better performance (especially for large files)
-        # Use a generator to stream chunks instead of loading everything into memory
+        # Download blob data - use readall() for smaller files, chunks() for streaming
+        # For better compatibility, read the entire blob into memory first
         try:
             blob_download = blob_client.download_blob()
-            
-            # Create a generator function to stream the data
-            def generate():
-                try:
-                    for chunk in blob_download.chunks():
-                        yield chunk
-                except Exception as e:
-                    logger.error(f"Error streaming blob {blob_name}: {str(e)}")
-                    raise
-            
-            # Create response with streaming generator
-            response = Response(
-                generate(),
-                mimetype=content_type
-            )
+            blob_data = blob_download.readall()
         except Exception as e:
             logger.error(f"Failed to download blob {blob_name}: {str(e)}")
             return jsonify({"error": f"Failed to download blob: {str(e)}"}), 500
+        
+        # Create response with blob data
+        # Use 'inline' to display in browser, not 'attachment' which forces download
+        response = Response(
+            blob_data,
+            mimetype=content_type
+        )
         
         # Set filename header - handle special characters safely
         filename = blob_name.split("/")[-1]
