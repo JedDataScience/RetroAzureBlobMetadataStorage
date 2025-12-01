@@ -438,6 +438,7 @@ python -m pytest test_smoke.py -v
 
 1. **API Testing**: Expand test coverage with unit and integration tests
 2. **Error Handling**: More detailed error messages and recovery mechanisms
+3. **Reduce code duplication**: create shared response builders and extract certain helpers
 
 ### Stretch Features
 

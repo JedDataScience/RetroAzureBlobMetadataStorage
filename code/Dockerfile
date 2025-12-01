@@ -24,4 +24,3 @@ EXPOSE 3000
 
 # Development mode - run dev server
 CMD ["pnpm", "dev"]
-
