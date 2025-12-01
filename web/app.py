@@ -2,6 +2,7 @@ import os
 import signal
 import logging
 import mimetypes
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 from flask import Flask, request, jsonify, Response
@@ -460,9 +461,36 @@ def api_view_blob(blob_name):
         # Set filename header - handle special characters safely
         filename = blob_name.split("/")[-1]
         try:
+            # Gunicorn only allows latin-1 in header values. Some filenames (like those
+            # coming from macOS Finder) can contain characters such as narrow no-break
+            # space (U+202F), which are not representable in latin-1 and will cause
+            # UnicodeEncodeError when gunicorn encodes the headers.
+            #
+            # To avoid 500 errors while still preserving a readable name:
+            # - We create a "safe" ASCII/latin-1 version for the plain filename=
+            # - We keep the full UTF-8 name in filename* using percent-encoding.
+            #
+            # Normalize, then replace any non-latin-1 characters with underscore.
+            normalized = unicodedata.normalize("NFKD", filename)
+            safe_filename_chars = []
+            for ch in normalized:
+                code = ord(ch)
+                if code < 128:
+                    # ASCII is always safe
+                    safe_filename_chars.append(ch)
+                elif code <= 255:
+                    # latin-1 representable; keep as-is
+                    safe_filename_chars.append(ch)
+                else:
+                    # Not representable in latin-1 – replace with underscore
+                    safe_filename_chars.append("_")
+            safe_filename = "".join(safe_filename_chars)
+
             # URL-encode the filename for the filename* parameter
             encoded_filename = quote(filename, safe='')
-            response.headers["Content-Disposition"] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            response.headers["Content-Disposition"] = (
+                f'inline; filename="{safe_filename}"; filename*=UTF-8\'\'{encoded_filename}'
+            )
         except Exception as e:
             # Fallback to simple filename if encoding fails
             logger.warning(f"Failed to encode filename {filename}: {str(e)}")
