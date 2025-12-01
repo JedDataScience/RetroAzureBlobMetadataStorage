@@ -13,6 +13,10 @@ CORS(app)  # Enable CORS for Next.js frontend
 # Support either FLASK_SECRET (example) or FLASK_SECRET_KEY (prior scaffold)
 app.secret_key = os.getenv("FLASK_SECRET") or os.getenv("FLASK_SECRET_KEY", "dev-secret")
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 # Add Content-Security-Policy header to upgrade insecure requests to HTTPS
 # This prevents mixed content issues by automatically upgrading HTTP requests to HTTPS
 @app.after_request
@@ -81,16 +85,23 @@ def is_azurite():
     return acct == "devstoreaccount1" or ("azurite" in blob_ep) or ("127.0.0.1:10000" in blob_ep)
 
 
+# Cache the BlobServiceClient for better performance
+_blob_service_client = None
+# Cache container existence checks
+_container_cache = set()
+
 def bsc() -> BlobServiceClient:
-    # Use reasonable retries and timeouts for better performance
-    return BlobServiceClient.from_connection_string(
-        os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
-        retry_total=3,
-        retry_mode="exponential",
-        retry_backoff_factor=0.5,
-        connection_timeout=10,
-        read_timeout=30,
-    )
+    global _blob_service_client
+    if _blob_service_client is None:
+        _blob_service_client = BlobServiceClient.from_connection_string(
+            os.getenv("AZURE_STORAGE_CONNECTION_STRING"),
+            retry_total=3,
+            retry_mode="exponential",
+            retry_backoff_factor=0.5,
+            connection_timeout=10,
+            read_timeout=30,
+        )
+    return _blob_service_client
 
 
 def blob_base_url(account_name: str) -> str:
@@ -161,11 +172,18 @@ def make_sas(container: str, blob: str, minutes: int | None = None) -> str:
 
 def ensure_container_exists(container_name: str):
     """Ensure the container exists; create it if missing."""
+    # Check cache first - if we've verified it exists, skip the check
+    if container_name in _container_cache:
+        svc = bsc()
+        return svc.get_container_client(container_name)
+    
     svc = bsc()
     cc = svc.get_container_client(container_name)
     try:
         # Check if container exists (with reasonable timeout)
         cc.get_container_properties()
+        # Cache it - container exists
+        _container_cache.add(container_name)
         # For Azurite local testing, make container public for easier access
         if is_azurite():
             try:
@@ -176,6 +194,8 @@ def ensure_container_exists(container_name: str):
         try:
             # Create container if it doesn't exist
             cc.create_container()
+            # Cache it - container now exists
+            _container_cache.add(container_name)
             # Make container public for Azurite
             if is_azurite():
                 try:
@@ -333,7 +353,10 @@ def api_upload_blob():
             content_type = f.content_type or "application/octet-stream"
         
         # Upload with content type settings
+        # Use streaming upload for better performance
         content_settings = ContentSettings(content_type=content_type)
+        # Reset file pointer to beginning in case it was read
+        f.seek(0)
         blob_client.upload_blob(f, overwrite=True, content_settings=content_settings)
         
         return jsonify({"message": "Uploaded successfully", "filename": f.filename})
@@ -369,11 +392,35 @@ def api_delete_blob(blob_name):
         service = bsc()
         container_name = os.getenv("BLOB_CONTAINER", os.getenv("AZURE_STORAGE_CONTAINER", "uploads"))
         blob_client = service.get_blob_client(container=container_name, blob=blob_name)
-        blob_client.delete_blob()
         
-        return jsonify({"message": "Blob deleted successfully"})
+        # Delete the blob - this is idempotent (safe to call even if blob doesn't exist)
+        # Use delete_snapshots='include' to handle snapshots gracefully
+        try:
+            blob_client.delete_blob(delete_snapshots='include')
+            return jsonify({"message": "Blob deleted successfully"})
+        except Exception as e:
+            error_msg = str(e)
+            error_code = getattr(e, 'error_code', None)
+            
+            # Check if error is because blob doesn't exist (which is OK for delete - idempotent)
+            if ("does not exist" in error_msg or 
+                "BlobNotFound" in error_msg or 
+                error_code == "BlobNotFound" or
+                "404" in error_msg):
+                return jsonify({"message": "Blob deleted successfully"})
+            else:
+                # Real error occurred
+                logger.error(f"Failed to delete blob {blob_name}: {error_msg}")
+                return jsonify({"error": f"Failed to delete blob: {error_msg}"}), 500
+        
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
+        error_msg = str(e)
+        # Check if it's a "not found" error (OK for delete operations)
+        if "does not exist" in error_msg or "BlobNotFound" in error_msg:
+            return jsonify({"message": "Blob deleted successfully"})
+        
+        logger.error(f"Error in delete endpoint for blob {blob_name}: {error_msg}")
+        return jsonify({"error": f"Internal server error: {error_msg}"}), 500
 
 
 @app.get("/api/blobs/<path:blob_name>/url")
@@ -396,7 +443,12 @@ def api_view_blob(blob_name):
         blob_client = service.get_blob_client(container=container_name, blob=blob_name)
         
         # Get blob properties to determine content type
-        props = blob_client.get_blob_properties()
+        try:
+            props = blob_client.get_blob_properties()
+        except Exception as e:
+            logger.error(f"Failed to get blob properties for {blob_name}: {str(e)}")
+            return jsonify({"error": f"Blob not found: {blob_name}"}), 404
+        
         md = props.metadata or {}
         
         # Determine content type from multiple sources
@@ -404,7 +456,7 @@ def api_view_blob(blob_name):
         content_type = md.get("mime_type")
         
         # 2. Try blob properties
-        if not content_type:
+        if not content_type and props.content_settings:
             content_type = props.content_settings.content_type
         
         # 3. Try to guess from filename
@@ -416,23 +468,39 @@ def api_view_blob(blob_name):
             content_type = "application/octet-stream"
         
         # Stream blob data for better performance (especially for large files)
-        # Use download_blob() which returns a streamable object
-        blob_download = blob_client.download_blob()
+        # Use a generator to stream chunks instead of loading everything into memory
+        try:
+            blob_download = blob_client.download_blob()
+            
+            # Create a generator function to stream the data
+            def generate():
+                try:
+                    for chunk in blob_download.chunks():
+                        yield chunk
+                except Exception as e:
+                    logger.error(f"Error streaming blob {blob_name}: {str(e)}")
+                    raise
+            
+            # Create response with streaming generator
+            response = Response(
+                generate(),
+                mimetype=content_type
+            )
+        except Exception as e:
+            logger.error(f"Failed to download blob {blob_name}: {str(e)}")
+            return jsonify({"error": f"Failed to download blob: {str(e)}"}), 500
         
-        # Create a generator function to stream the data
-        def generate():
-            for chunk in blob_download.chunks():
-                yield chunk
-        
-        # Create response with proper headers
-        # Use 'inline' to display in browser, not 'attachment' which forces download
-        response = Response(
-            generate(),
-            mimetype=content_type
-        )
+        # Set filename header - handle special characters safely
         filename = blob_name.split("/")[-1]
-        # Ensure filename is properly encoded
-        response.headers["Content-Disposition"] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{quote(filename)}'
+        try:
+            # URL-encode the filename for the filename* parameter
+            encoded_filename = quote(filename, safe='')
+            response.headers["Content-Disposition"] = f'inline; filename="{filename}"; filename*=UTF-8\'\'{encoded_filename}'
+        except Exception as e:
+            # Fallback to simple filename if encoding fails
+            logger.warning(f"Failed to encode filename {filename}: {str(e)}")
+            response.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+        
         response.headers["Cache-Control"] = "public, max-age=3600"
         response.headers["X-Content-Type-Options"] = "nosniff"
         if props.size:
@@ -440,7 +508,8 @@ def api_view_blob(blob_name):
         
         return response
     except Exception as e:
-        return jsonify({"error": str(e)}), 404
+        logger.error(f"Error viewing blob {blob_name}: {str(e)}", exc_info=True)
+        return jsonify({"error": f"Internal server error: {str(e)}"}), 500
 
 
 @app.get("/health")
